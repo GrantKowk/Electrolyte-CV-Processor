@@ -6,9 +6,6 @@ import pandas as pd
 from .config import EN_HEADERS, CN_HEADERS
 from .logging_utils import log_warning
 
-def _column_display_name(column):
-    return f"{EN_HEADERS.get(column, column)}\n{CN_HEADERS.get(column, column)}"
-
 
 def _style_summary_workbook(xlsx_path):
     """四工作表统一格式：双层标题、冻结前两行、居中、合理列宽与数字格式。"""

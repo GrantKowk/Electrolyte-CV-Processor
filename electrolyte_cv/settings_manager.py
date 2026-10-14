@@ -4,8 +4,6 @@ import copy
 import json
 from typing import Any, Mapping
 
-SETTINGS_ORGANIZATION = "OpenAI"
-SETTINGS_APPLICATION = "ElectrolyteCVProcessor"
 PROFILE_SCHEMA_VERSION = 1
 DEFAULTS_KEY = "preferences/default_profile"
 LAST_SESSION_KEY = "preferences/last_session_profile"

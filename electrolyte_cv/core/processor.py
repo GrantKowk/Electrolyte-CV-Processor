@@ -10,7 +10,7 @@ from .logging_utils import log_info, log_warning
 from .parsers import parse_txt_to_curves, parse_excel_to_curves
 from .analysis import (
     analyze_cv_features, filter_curves, split_at_extreme,
-    generate_auto_indices, select_curves_by_indices,
+    generate_auto_indices,
 )
 from .export import _write_main_results_workbook, _style_simple_data_workbook
 

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 try:
-    from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSize, QRectF, QSettings, QPoint
+    from PySide6.QtCore import Qt, QThread, Signal, QTimer, QSize, QRectF, QSettings
     from PySide6.QtGui import (
         QColor, QFont, QIcon, QAction, QActionGroup, QBrush, QPainter, QPen,
-        QKeySequence, QCursor
+        QKeySequence
     )
     from PySide6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,

@@ -93,40 +93,6 @@ def _valid_scalar(value):
         return False
 
 
-def interpolate_current_on_analysis_branch(raw: pd.DataFrame, mode: str, potential: float,
-                                           *, min_points: int = MIN_PLOT_POINTS) -> float:
-    """Map a feature potential to current on the *analysis scan branch*.
-
-    This helper is intentionally independent of whichever CV view is currently
-    displayed.  In full-CV mode the displayed voltage trace is non-monotonic and
-    the same potential can occur on two branches, so marker Y coordinates must
-    never be obtained by sorting/interpolating the full loop.
-    """
-    prepared = prepare_cv_curve_for_plot(
-        raw, mode, full_scan=False, smooth=False, min_points=min_points
-    )
-    v = np.asarray(prepared["v"], dtype=float)
-    i = np.asarray(prepared["i_raw"], dtype=float)
-    finite = np.isfinite(v) & np.isfinite(i)
-    v = v[finite]; i = i[finite]
-    if len(v) < 2:
-        raise ValueError("分析扫描支有效点不足，无法定位标记")
-
-    order = np.argsort(v, kind="mergesort")
-    sv = v[order]; si = i[order]
-    # Collapse duplicate/plateau voltages on the same branch by averaging their
-    # currents.  This preserves branch identity while making interpolation stable.
-    uniq, inverse = np.unique(sv, return_inverse=True)
-    sums = np.zeros(len(uniq), dtype=float)
-    counts = np.zeros(len(uniq), dtype=float)
-    np.add.at(sums, inverse, si)
-    np.add.at(counts, inverse, 1.0)
-    ui = sums / np.maximum(counts, 1.0)
-    if len(uniq) < 2:
-        raise ValueError("分析扫描支电位变化不足，无法定位标记")
-    return float(np.interp(float(potential), uniq, ui))
-
-
 def build_cv_marker_positions(
     raw: pd.DataFrame,
     row,

@@ -30,8 +30,11 @@ python -m venv .venv
 
 ```text
 Electrolyte-CV-Processor/
-├── electrolyte_cv/                   # 应用源码
-│   ├── core/                         # 数据处理与分析
+├── assets/                               # 应用图标
+│   ├── app_icon.ico
+│   └── app_icon.png
+├── electrolyte_cv/                       # 应用源码
+│   ├── core/                             # 解析、分析与导出
 │   │   ├── __init__.py
 │   │   ├── analysis.py
 │   │   ├── config.py
@@ -42,28 +45,25 @@ Electrolyte-CV-Processor/
 │   │   ├── parsers.py
 │   │   ├── plot_helpers.py
 │   │   └── processor.py
-│   ├── ui/                           # 桌面界面
+│   ├── ui/                               # 桌面界面
 │   │   ├── __init__.py
-│   │   ├── main_window.py
+│   │   ├── main_window.py                # CV 主窗口
 │   │   ├── preferences_dialog.py
 │   │   ├── qt_compat.py
 │   │   ├── styles.py
 │   │   └── widgets.py
 │   ├── __init__.py
-│   ├── app.py                        # Qt 应用入口
-│   ├── resources.py                  # 资源路径管理
-│   └── settings_manager.py           # 本机偏好设置
-├── assets/                           # 应用图标
-│   ├── app_icon.ico
-│   └── app_icon.png
-├── packaging/                        # Windows 打包配置
+│   ├── app.py                            # 应用入口
+│   ├── resources.py                      # 资源路径
+│   └── settings_manager.py               # 偏好设置
+├── packaging/                            # Windows 打包配置
 │   ├── ElectrolyteCVProcessor.spec
 │   ├── requirements-build.txt
 │   └── version_info.txt
-├── LICENSE                           # MIT 许可证
-├── main.py                           # 启动脚本
-├── README.md                         # 项目说明
-└── requirements.txt                  # 运行依赖
+├── LICENSE                               # MIT 许可证
+├── README.md                             # 项目说明
+├── main.py                               # 启动脚本
+└── requirements.txt                      # 运行依赖
 ```
 
 ## Windows 打包

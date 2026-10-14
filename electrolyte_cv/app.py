@@ -29,7 +29,7 @@ def run_gui():
 
     from .ui.qt_compat import QApplication, QFont, QIcon
     from .ui.styles import V19_LIGHT_STYLE
-    from .ui.main_window import CVQtMainWindowV19
+    from .ui.main_window import CVMainWindow
 
     _set_windows_app_id()
     app = QApplication.instance() or QApplication(sys.argv)
@@ -46,7 +46,7 @@ def run_gui():
     if icon_file.exists():
         app.setWindowIcon(QIcon(str(icon_file)))
 
-    win = CVQtMainWindowV19()
+    win = CVMainWindow()
     if icon_file.exists():
         win.setWindowIcon(QIcon(str(icon_file)))
     win.show()

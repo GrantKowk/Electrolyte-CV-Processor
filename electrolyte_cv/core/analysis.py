@@ -8,7 +8,7 @@ from .config import (
     QCStatus, FEATURE_SMOOTH_MV, FEATURE_BASELINE_FRACTION,
     FEATURE_BASELINE_MIN_MV, FEATURE_BASELINE_MAX_MV, FEATURE_ONSET_SIGMA,
     FEATURE_ONSET_PERSIST_MV, FEATURE_TANGENT_LOW_FRAC, FEATURE_TANGENT_HIGH_FRAC,
-    FEATURE_TANGENT_R2_MIN, FEATURE_ONSET_QC_TOL_MV, FEATURE_BOUNDARY_MV,
+    FEATURE_TANGENT_R2_MIN, FEATURE_BOUNDARY_MV,
 )
 from .logging_utils import log_info, log_warning
 
@@ -528,28 +528,6 @@ def analyze_cv_features(curves, mode):
             'Onset_tangent_shift_vs_ref (mV)': 'Red_onset_tangent_shift_vs_ref (mV)',
         }
     return feature_df.rename(columns=rename_map), verification
-
-
-# ================== 圈号过滤函数 ==================
-def select_curves_by_indices(df_integral, indices, total_curves):
-    """
-    从积分结果 DataFrame 中筛选指定圈号的数据
-    indices: 圈号列表（整数）
-    total_curves: 总圈数（用于有效性检查）
-    返回过滤后的 DataFrame
-    """
-    valid_indices = [i for i in indices if 1 <= i <= total_curves]
-    if not valid_indices:
-        raise ValueError("指定的圈号均无效，请检查输入")
-    if len(valid_indices) < len(indices):
-        log_warning(f"部分圈号超出范围（总圈数 {total_curves}），已忽略无效圈号")
-    curve_names = [f"CURVE{i}" for i in valid_indices]
-    filtered = df_integral[df_integral['Curve'].isin(curve_names)].copy()
-    order_map = {name: idx for idx, name in enumerate(curve_names)}
-    filtered['_order'] = filtered['Curve'].map(order_map)
-    filtered = filtered.sort_values('_order').drop('_order', axis=1)
-    return filtered
-
 def generate_auto_indices(total_curves, target_count=5):
     """自动生成均匀分布的圈号，包含首尾"""
     if total_curves <= target_count:

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Callable, Optional
-
 _LOG_CALLBACK = None
 
 def set_log_callback(callback=None):
@@ -23,5 +21,3 @@ def log_info(msg):
 def log_warning(msg):
     _emit_log("WARNING", msg)
 
-def log_error(msg):
-    _emit_log("ERROR", msg)

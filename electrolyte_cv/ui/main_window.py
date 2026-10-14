@@ -12,7 +12,7 @@ import pandas as pd
 from matplotlib.lines import Line2D
 
 from .qt_compat import *
-from .styles import LIGHT_STYLE, DARK_STYLE, V19_LIGHT_STYLE, V19_DARK_STYLE
+from .styles import V19_LIGHT_STYLE, V19_DARK_STYLE
 from .widgets import (
     MATPLOTLIB_FONT, ModernCheckBox, ModernRadioButton, NoWheelDoubleSpinBox,
     NoWheelSpinBox, NoWheelComboBox, apply_card_shadow, DropFileList, MplPanel,
@@ -29,35 +29,29 @@ from .preferences_dialog import PreferencesDialog
 
 require_qt()
 
-class CVQtMainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Electrolyte CV Processor v2.0")
-        self.resize(1580, 920)
-        self.setMinimumSize(1220, 760)
-        self.file_paths = []
-        self.analysis_cache = {}
-        self.raw_curve_cache = {}
-        self.mode_cache = {}
-        self.default_selection_cache = {}
-        self.preview_selection_cache = {}
-        self.current_preview_path = None
-        self.current_focus_curve = None
-        self.worker = None
-        self.theme = "light"
-        self.common_file_combos = []
-        self.common_cycle_buttons = []
-        self.common_mode_labels = []
-        self.common_count_labels = []
-        self.table_map = {}
-        self.plot_map = {}
-        self._building_common = False
-        self._build_ui()
-        self._build_menu()
-        self._apply_defaults()
-        self.statusBar().showMessage("就绪。请添加 .DTA / .txt / .xlsx 文件。")
+class AnalysisStatus(str, Enum):
+    NOT_ANALYZED = "not_analyzed"
+    READY = "ready"
+    OUTDATED = "outdated"
+    PROCESSING = "processing"
+    FAILED = "failed"
 
-    # ------------------------------------------------------------- helpers
+
+@dataclass
+class FileState:
+    path: str
+    status: AnalysisStatus = AnalysisStatus.NOT_ANALYZED
+    parameter_snapshot: Optional[dict] = None
+    draft_params: Optional[dict] = None
+    selected_cycles: set = field(default_factory=set)
+    default_cycles: list = field(default_factory=list)
+    reference_curve: Optional[str] = None
+    last_error: Optional[str] = None
+
+
+class CVMainWindow(QMainWindow):
+    """Desktop CV analysis with per-file state and six result tabs."""
+
     @staticmethod
     def curve_no(name):
         m = re.search(r"(\d+)$", str(name))
@@ -143,358 +137,6 @@ class CVQtMainWindow(QMainWindow):
             QCStatus.FAILED.value: "Failed：当前结果未达到可靠判定条件。",
         }.get(st, st))
 
-    # ------------------------------------------------------------- UI build
-    def _build_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QHBoxLayout(central)
-        root.setContentsMargins(8, 7, 8, 7)
-        root.setSpacing(5)
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        root.addWidget(splitter)
-
-        left_scroll = QScrollArea()
-        left_scroll.setWidgetResizable(True)
-        left_scroll.setMinimumWidth(300)
-        left_scroll.setMaximumWidth(450)
-        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        left = QWidget()
-        left_scroll.setWidget(left)
-        self.left_layout = QVBoxLayout(left)
-        self.left_layout.setContentsMargins(2, 2, 5, 2)
-        self.left_layout.setSpacing(8)
-        self._build_left_panel()
-        splitter.addWidget(left_scroll)
-
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(False)
-        self.tabs.currentChanged.connect(self._refresh_current_tab)
-        self._build_tabs()
-        splitter.addWidget(self.tabs)
-        splitter.setSizes([340, 1200])
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-
-    def _build_menu(self):
-        file_menu = self.menuBar().addMenu("文件")
-        act_add = QAction("添加文件...", self); act_add.triggered.connect(self._pick_files)
-        act_out = QAction("选择输出目录...", self); act_out.triggered.connect(self._pick_output)
-        act_exit = QAction("退出", self); act_exit.triggered.connect(self.close)
-        file_menu.addAction(act_add); file_menu.addAction(act_out); file_menu.addSeparator(); file_menu.addAction(act_exit)
-        analysis_menu = self.menuBar().addMenu("分析")
-        act_run = QAction("开始处理", self); act_run.triggered.connect(self._start_analysis)
-        analysis_menu.addAction(act_run)
-        view_menu = self.menuBar().addMenu("视图")
-        for idx, text in enumerate(["CV曲线", "峰电位", "起始电位", "位移", "QC"]):
-            act = QAction(text, self)
-            act.triggered.connect(lambda checked=False, i=idx: self.tabs.setCurrentIndex(i))
-            view_menu.addAction(act)
-        view_menu.addSeparator()
-        theme_group = QActionGroup(self)
-        theme_group.setExclusive(True)
-        self.act_light_theme = QAction("浅色主题", self, checkable=True)
-        self.act_dark_theme = QAction("深色主题", self, checkable=True)
-        self.act_light_theme.setChecked(True)
-        theme_group.addAction(self.act_light_theme); theme_group.addAction(self.act_dark_theme)
-        self.act_light_theme.triggered.connect(lambda checked=True: self._set_theme("light") if checked else None)
-        self.act_dark_theme.triggered.connect(lambda checked=True: self._set_theme("dark") if checked else None)
-        view_menu.addAction(self.act_light_theme); view_menu.addAction(self.act_dark_theme)
-        help_menu = self.menuBar().addMenu("帮助")
-        act_about = QAction("关于", self); act_about.triggered.connect(self._about); help_menu.addAction(act_about)
-
-    def _set_theme(self, theme):
-        self.theme = "dark" if theme == "dark" else "light"
-        app = QApplication.instance()
-        if app is not None:
-            app.setStyleSheet(DARK_STYLE if self.theme == "dark" else LIGHT_STYLE)
-        if hasattr(self, "act_light_theme"):
-            self.act_light_theme.blockSignals(True); self.act_dark_theme.blockSignals(True)
-            self.act_light_theme.setChecked(self.theme == "light")
-            self.act_dark_theme.setChecked(self.theme == "dark")
-            self.act_light_theme.blockSignals(False); self.act_dark_theme.blockSignals(False)
-        panels = list(getattr(self, "plot_map", {}).values())
-        if hasattr(self, "charge_plot"):
-            panels.append(self.charge_plot)
-        for panel in panels:
-            try:
-                panel.set_theme(self.theme)
-            except Exception:
-                pass
-        self._refresh_current_tab()
-
-    def _build_left_panel(self):
-        files_group = QGroupBox("文件（拖拽或添加）")
-        fl = QVBoxLayout(files_group); fl.setContentsMargins(10, 14, 10, 10)
-        self.file_list = DropFileList(); self.file_list.setMinimumHeight(150); self.file_list.filesDropped.connect(self._add_files)
-        fl.addWidget(self.file_list)
-        row = QHBoxLayout()
-        add_btn = QPushButton("添加文件"); clear_btn = QPushButton("清空")
-        add_btn.clicked.connect(self._pick_files); clear_btn.clicked.connect(self._clear_files)
-        row.addWidget(add_btn); row.addWidget(clear_btn); fl.addLayout(row)
-        apply_card_shadow(files_group)
-        self.left_layout.addWidget(files_group)
-
-        out_group = QGroupBox("输出设置")
-        og = QGridLayout(out_group); og.setContentsMargins(10, 14, 10, 10)
-        self.output_edit = QLineEdit(); self.output_edit.setPlaceholderText("留空时输出至原文件夹")
-        browse = QPushButton("浏览..."); default = QPushButton("默认")
-        browse.clicked.connect(self._pick_output); default.clicked.connect(lambda: self.output_edit.clear())
-        og.addWidget(QLabel("输出路径:"), 0, 0); og.addWidget(self.output_edit, 0, 1); og.addWidget(browse, 0, 2); og.addWidget(default, 1, 2)
-        hint = QLabel("留空时输出至原文件夹"); hint.setProperty("muted", True); og.addWidget(hint, 1, 1)
-        apply_card_shadow(out_group)
-        self.left_layout.addWidget(out_group)
-
-        mode_group = QGroupBox("处理模式")
-        ml = QHBoxLayout(mode_group); ml.setContentsMargins(10, 14, 10, 10)
-        self.max_radio = ModernRadioButton("筛选正值 (max)"); self.min_radio = ModernRadioButton("筛选负值 (min)")
-        self.max_radio.setChecked(True); self.max_radio.toggled.connect(self._mode_changed)
-        ml.addWidget(self.max_radio); ml.addWidget(self.min_radio); ml.addStretch(1)
-        apply_card_shadow(mode_group)
-        self.left_layout.addWidget(mode_group)
-
-        voltage_group = QGroupBox("扫描范围")
-        vg = QGridLayout(voltage_group); vg.setContentsMargins(10, 14, 10, 9)
-        self.start_spin = QDoubleSpinBox(); self.start_spin.setRange(-20, 20); self.start_spin.setDecimals(4); self.start_spin.setValue(2.7)
-        self.end_spin = QDoubleSpinBox(); self.end_spin.setRange(-20, 20); self.end_spin.setDecimals(4); self.end_spin.setValue(4.5)
-        self.direction_hint = QLabel(); self.direction_hint.setProperty("muted", True)
-        vg.addWidget(QLabel("起始电压 (V):"), 0, 0); vg.addWidget(self.start_spin, 0, 1)
-        vg.addWidget(QLabel("终止电压 (V):"), 0, 2); vg.addWidget(self.end_spin, 0, 3)
-        vg.addWidget(self.direction_hint, 1, 0, 1, 4)
-        apply_card_shadow(voltage_group)
-        self.left_layout.addWidget(voltage_group)
-
-        scan_group = QGroupBox("扫描参数")
-        sg = QGridLayout(scan_group); sg.setContentsMargins(10, 14, 10, 10)
-        self.scan_spin = QDoubleSpinBox(); self.scan_spin.setRange(0.0001, 10000); self.scan_spin.setDecimals(4); self.scan_spin.setValue(5.0); self.scan_spin.setSuffix(" mV/s")
-        self.precision_spin = QDoubleSpinBox(); self.precision_spin.setRange(0.1, 100); self.precision_spin.setDecimals(2); self.precision_spin.setValue(5.0); self.precision_spin.setSuffix(" mV")
-        b2 = QPushButton("2"); b5 = QPushButton("5"); b2.setMaximumWidth(46); b5.setMaximumWidth(46)
-        b2.clicked.connect(lambda: self.scan_spin.setValue(2.0)); b5.clicked.connect(lambda: self.scan_spin.setValue(5.0))
-        sg.addWidget(QLabel("扫描速率:"), 0, 0); sg.addWidget(self.scan_spin, 0, 1); sg.addWidget(b2, 0, 2); sg.addWidget(b5, 0, 3)
-        sg.addWidget(QLabel("切分精度:"), 1, 0); sg.addWidget(self.precision_spin, 1, 1)
-        apply_card_shadow(scan_group)
-        self.left_layout.addWidget(scan_group)
-
-        sel_group = QGroupBox("输出圈数")
-        sl = QGridLayout(sel_group); sl.setContentsMargins(10, 14, 10, 10)
-        self.auto_radio = ModernRadioButton("自动"); self.manual_radio = ModernRadioButton("手动"); self.auto_radio.setChecked(True)
-        self.auto_target_spin = QSpinBox(); self.auto_target_spin.setRange(1, 100); self.auto_target_spin.setValue(5)
-        self.preset_combo = QComboBox(); self.preset_combo.addItems(list(PRESET_SCHEMES.keys())); self.preset_combo.setCurrentText("二十圈选点")
-        self.manual_edit = QLineEdit("1, 5, 10, 15, 20")
-        self.auto_radio.toggled.connect(self._selection_mode_changed); self.preset_combo.currentTextChanged.connect(self._preset_changed)
-        sl.addWidget(self.auto_radio, 0, 0); sl.addWidget(QLabel("目标圈数:"), 0, 1); sl.addWidget(self.auto_target_spin, 0, 2)
-        sl.addWidget(self.manual_radio, 1, 0); sl.addWidget(self.preset_combo, 1, 1); sl.addWidget(self.manual_edit, 1, 2)
-        apply_card_shadow(sel_group)
-        self.left_layout.addWidget(sel_group)
-
-        options = QHBoxLayout()
-        self.cut_check = ModernCheckBox("仅输出指定圈数"); self.cut_check.setChecked(True)
-        self.verify_check = ModernCheckBox("生成验证文件")
-        options.addWidget(self.cut_check); options.addWidget(self.verify_check); options.addStretch(1)
-        self.left_layout.addLayout(options)
-
-        self.run_btn = QPushButton("开始处理"); self.run_btn.setProperty("primary", True); self.run_btn.setMinimumHeight(38); self.run_btn.clicked.connect(self._start_analysis)
-        run_row = QHBoxLayout(); run_row.addStretch(1); run_row.addWidget(self.run_btn); self.left_layout.addLayout(run_row)
-
-        log_group = QGroupBox("运行日志")
-        ll = QVBoxLayout(log_group); ll.setContentsMargins(8, 14, 8, 8)
-        self.log_edit = QPlainTextEdit(); self.log_edit.setReadOnly(True); self.log_edit.setMinimumHeight(135)
-        ll.addWidget(self.log_edit)
-        self.left_layout.addWidget(log_group, 1)
-
-    def _build_tabs(self):
-        self.cv_tab = QWidget(); self.peak_tab = QWidget(); self.onset_tab = QWidget(); self.shift_tab = QWidget(); self.qc_tab = QWidget()
-        self.tabs.addTab(self.cv_tab, "CV曲线"); self.tabs.addTab(self.peak_tab, "峰电位"); self.tabs.addTab(self.onset_tab, "起始电位"); self.tabs.addTab(self.shift_tab, "位移"); self.tabs.addTab(self.qc_tab, "QC")
-        self._build_cv_tab(); self._build_peak_tab(); self._build_onset_tab(); self._build_shift_tab(); self._build_qc_tab()
-
-    def _make_common_header(self, layout):
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("当前文件:"))
-        combo = QComboBox(); combo.setMinimumWidth(350); combo.currentIndexChanged.connect(lambda idx, c=combo: self._common_file_changed(c))
-        self.common_file_combos.append(combo); row1.addWidget(combo, 1)
-        mode_label = QLabel("模式：氧化 / Max"); count_label = QLabel("有效循环：0")
-        mode_label.setProperty("muted", True); count_label.setProperty("muted", True)
-        self.common_mode_labels.append(mode_label); self.common_count_labels.append(count_label)
-        row1.addWidget(mode_label); row1.addSpacing(12); row1.addWidget(count_label)
-        layout.addLayout(row1)
-        row2 = QHBoxLayout(); row2.addWidget(QLabel("显示圈数:"))
-        cycle_btn = QPushButton("未选择圈数"); cycle_btn.setMinimumWidth(320); cycle_btn.clicked.connect(self._open_cycle_selector)
-        self.common_cycle_buttons.append(cycle_btn); row2.addWidget(cycle_btn, 1)
-        b_all = QPushButton("全选"); b_clear = QPushButton("清空"); b_def = QPushButton("恢复默认")
-        b_all.clicked.connect(self._select_all_preview); b_clear.clicked.connect(self._clear_preview); b_def.clicked.connect(self._restore_default_preview)
-        row2.addWidget(b_all); row2.addWidget(b_clear); row2.addWidget(b_def)
-        layout.addLayout(row2)
-        line = QFrame(); line.setFrameShape(QFrame.Shape.HLine); line.setStyleSheet("color:#555;"); layout.addWidget(line)
-
-    def _build_cv_tab(self):
-        lay = QVBoxLayout(self.cv_tab)
-        lay.setContentsMargins(10, 10, 10, 10)
-        lay.setSpacing(7)
-        self._make_common_header(lay)
-
-        ctrl = QHBoxLayout()
-        ctrl.setSpacing(8)
-        ctrl.addWidget(QLabel("曲线:"))
-        self.cv_raw = ModernRadioButton("原始数据")
-        self.cv_smooth = ModernRadioButton("平滑数据")
-        self.cv_both = ModernRadioButton("原始+平滑")
-        self.cv_curve_group = QButtonGroup(self)
-        self.cv_curve_group.setExclusive(True)
-        for w in (self.cv_raw, self.cv_smooth, self.cv_both):
-            self.cv_curve_group.addButton(w)
-            w.toggled.connect(self._refresh_cv)
-        self.cv_raw.setChecked(True)
-        ctrl.addWidget(self.cv_raw); ctrl.addWidget(self.cv_smooth); ctrl.addWidget(self.cv_both)
-
-        ctrl.addSpacing(16)
-        ctrl.addWidget(QLabel("扫描:"))
-        self.cv_analysis = ModernRadioButton("分析扫描支")
-        self.cv_full = ModernRadioButton("完整 CV")
-        self.cv_scan_group = QButtonGroup(self)
-        self.cv_scan_group.setExclusive(True)
-        for w in (self.cv_analysis, self.cv_full):
-            self.cv_scan_group.addButton(w)
-            w.toggled.connect(self._refresh_cv)
-        self.cv_analysis.setChecked(True)
-        ctrl.addWidget(self.cv_analysis); ctrl.addWidget(self.cv_full)
-
-        ctrl.addSpacing(16)
-        ctrl.addWidget(QLabel("标记:"))
-        self.cv_peak = ModernCheckBox("峰电位")
-        self.cv_onset = ModernCheckBox("起始电位")
-        self.cv_legend = ModernCheckBox("图例")
-        for w in (self.cv_peak, self.cv_onset, self.cv_legend):
-            w.setChecked(True)
-            w.stateChanged.connect(self._refresh_cv)
-            ctrl.addWidget(w)
-        ctrl.addStretch(1)
-        lay.addLayout(ctrl)
-
-        split = QSplitter(Qt.Orientation.Vertical)
-        self.cv_plot = MplPanel(empty_text="添加 CV 文件后可在此查看多圈曲线")
-        self.cv_plot.curveClicked.connect(self._plot_curve_clicked)
-        self.cv_plot.hoverStatus.connect(self.statusBar().showMessage)
-        self.charge_plot = MplPanel(empty_text="完成分析后显示库伦电荷", compact=True)
-        self.charge_plot.toolbar.hide()
-        self.charge_plot.curveClicked.connect(self._plot_curve_clicked)
-        self.charge_plot.hoverStatus.connect(self.statusBar().showMessage)
-        split.addWidget(self.cv_plot)
-        split.addWidget(self.charge_plot)
-        split.setStretchFactor(0, 7)
-        split.setStretchFactor(1, 3)
-        split.setSizes([570, 230])
-        self.plot_map["cv"] = self.cv_plot
-        lay.addWidget(split, 1)
-
-
-    def _make_plot_table_tab(self, page, control_builder, key, table_ratio=30):
-        lay = QVBoxLayout(page); lay.setContentsMargins(8, 8, 8, 8); lay.setSpacing(5); self._make_common_header(lay)
-        control_builder(lay)
-        split = QSplitter(Qt.Orientation.Vertical)
-        plot = MplPanel(); plot.curveClicked.connect(self._plot_curve_clicked); plot.hoverStatus.connect(self.statusBar().showMessage)
-        table = self._new_table(); table.itemSelectionChanged.connect(lambda k=key, t=table: self._table_selected(k, t)); table.itemDoubleClicked.connect(lambda item, k=key, t=table: self._table_double_clicked(k, t))
-        split.addWidget(plot); split.addWidget(table); split.setStretchFactor(0, 1); split.setStretchFactor(1, 0); 
-        if table_ratio >= 34:
-            split.setSizes([470, 250])
-        elif table_ratio <= 28:
-            split.setSizes([520, 200])
-        else:
-            split.setSizes([500, 220])
-        lay.addWidget(split, 1); self.plot_map[key] = plot; self.table_map[key] = table
-        return plot, table
-
-    def _build_peak_tab(self):
-        def controls(lay):
-            row = QHBoxLayout(); row.addWidget(QLabel("显示指标:")); self.peak_pot = ModernRadioButton("峰电位"); self.peak_cur = ModernRadioButton("峰电流"); self.peak_pot.setChecked(True)
-            self.peak_labels = ModernCheckBox("显示数据标签")
-            for w in (self.peak_pot, self.peak_cur): w.toggled.connect(self._refresh_peak)
-            self.peak_labels.stateChanged.connect(self._refresh_peak); row.addWidget(self.peak_pot); row.addWidget(self.peak_cur); row.addSpacing(12); row.addWidget(self.peak_labels); row.addStretch(1); lay.addLayout(row)
-        self.peak_plot, self.peak_table = self._make_plot_table_tab(self.peak_tab, controls, "peak", 34)
-
-    def _build_onset_tab(self):
-        def controls(lay):
-            row = QHBoxLayout()
-            row.addWidget(QLabel("显示方法:"))
-            self.onset_thr = ModernCheckBox("阈值法")
-            self.onset_tan = ModernCheckBox("切线法")
-            self.onset_labels = ModernCheckBox("显示数据标签")
-            self.onset_thr.setChecked(True)
-            self.onset_tan.setChecked(True)
-            for w in (self.onset_thr, self.onset_tan, self.onset_labels):
-                w.stateChanged.connect(self._refresh_onset)
-                row.addWidget(w)
-            row.addStretch(1)
-            lay.addLayout(row)
-        self.onset_plot, self.onset_table = self._make_plot_table_tab(self.onset_tab, controls, "onset", 34)
-
-
-    def _build_shift_tab(self):
-        def controls(lay):
-            row = QHBoxLayout()
-            row.addWidget(QLabel("参考圈:"))
-            self.ref_combo = QComboBox()
-            self.ref_combo.setMinimumWidth(120)
-            self.ref_combo.currentTextChanged.connect(self._reference_changed)
-            row.addWidget(self.ref_combo)
-            row.addSpacing(14)
-            row.addWidget(QLabel("显示:"))
-            self.shift_peak = ModernCheckBox("峰电位位移")
-            self.shift_threshold = ModernCheckBox("阈值法 Onset 位移")
-            self.shift_tangent = ModernCheckBox("切线法 Onset 位移")
-            self.shift_zero = ModernCheckBox("ΔE=0 参考线")
-            self.shift_labels = ModernCheckBox("数据标签")
-            for w in (self.shift_peak, self.shift_threshold, self.shift_tangent, self.shift_zero):
-                w.setChecked(True)
-            for w in (self.shift_peak, self.shift_threshold, self.shift_tangent, self.shift_zero, self.shift_labels):
-                w.stateChanged.connect(self._refresh_shift)
-                row.addWidget(w)
-            row.addStretch(1)
-            lay.addLayout(row)
-        self.shift_plot, self.shift_table = self._make_plot_table_tab(self.shift_tab, controls, "shift", 34)
-
-
-    def _build_qc_tab(self):
-        lay = QVBoxLayout(self.qc_tab)
-        lay.setContentsMargins(10, 10, 10, 10)
-        lay.setSpacing(8)
-        self._make_common_header(lay)
-
-        cards = QHBoxLayout()
-        self.qc_peak_summary = QLabel("峰识别\n暂无结果")
-        self.qc_threshold_summary = QLabel("阈值法 Onset\n暂无结果")
-        self.qc_tangent_summary = QLabel("切线法 Onset\n暂无结果")
-        self.qc_scan_summary = QLabel("扫描方向\n暂无结果")
-        for lab in (self.qc_peak_summary, self.qc_threshold_summary, self.qc_tangent_summary, self.qc_scan_summary):
-            lab.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lab.setMinimumHeight(78)
-            lab.setProperty("summary", True)
-            cards.addWidget(lab)
-        lay.addLayout(cards)
-
-        filt = QHBoxLayout()
-        filt.addWidget(QLabel("显示状态:"))
-        self.qc_filters = {}
-        for st in (QCStatus.OK.value, QCStatus.REVIEW.value, QCStatus.BOUNDARY.value, QCStatus.FAILED.value):
-            cb = ModernCheckBox(st)
-            cb.setChecked(True)
-            cb.stateChanged.connect(self._refresh_qc)
-            self.qc_filters[st] = cb
-            filt.addWidget(cb)
-        self.qc_only_abnormal = ModernCheckBox("仅显示需要检查")
-        self.qc_only_abnormal.stateChanged.connect(self._refresh_qc)
-        filt.addWidget(self.qc_only_abnormal)
-        reset = QPushButton("恢复全部")
-        reset.clicked.connect(self._reset_qc)
-        filt.addWidget(reset)
-        filt.addStretch(1)
-        lay.addLayout(filt)
-
-        self.qc_table = self._new_table()
-        self.qc_table.itemSelectionChanged.connect(lambda: self._table_selected("qc", self.qc_table))
-        self.qc_table.itemDoubleClicked.connect(lambda item: self._table_double_clicked("qc", self.qc_table))
-        self.table_map["qc"] = self.qc_table
-        lay.addWidget(self.qc_table, 1)
-
-
     def _new_table(self):
         t = CopyableTableWidget()
         t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -514,35 +156,9 @@ class CVQtMainWindow(QMainWindow):
         t.setToolTip("支持 Ctrl+C 复制所选行；右键可复制全部或含表头数据。")
         return t
 
-    def _apply_defaults(self):
-        self._mode_changed(); self._selection_mode_changed()
-
-    # ------------------------------------------------------------- file / params
     def _pick_files(self):
         paths, _ = QFileDialog.getOpenFileNames(self, "选择 CV 数据文件", "", "CV data (*.DTA *.dta *.txt *.xlsx *.xls);;All files (*.*)")
         if paths: self._add_files(paths)
-
-    def _add_files(self, paths):
-        added = 0
-        for p in paths:
-            p = str(Path(p))
-            if Path(p).suffix.lower() not in SUPPORTED_EXTENSIONS or p in self.file_paths: continue
-            self.file_paths.append(p); self.file_list.addItem(p); added += 1
-        if added: self._log("INFO", f"已添加 {added} 个文件。")
-
-    def _clear_files(self):
-        self.file_paths.clear(); self.file_list.clear(); self._log("INFO", "已清空输入文件列表。")
-
-    def _pick_output(self):
-        p = QFileDialog.getExistingDirectory(self, "选择输出目录", self.output_edit.text() or str(Path.cwd()))
-        if p: self.output_edit.setText(p)
-
-    def _mode_changed(self):
-        is_max = self.max_radio.isChecked()
-        if is_max:
-            self.start_spin.setValue(2.7); self.end_spin.setValue(4.5); self.direction_hint.setText("正扫：终止电压 > 起始电压；特征分析使用原始去程扫描支")
-        else:
-            self.start_spin.setValue(3.0); self.end_spin.setValue(0.01); self.direction_hint.setText("负扫：终止电压 < 起始电压；特征分析使用原始去程扫描支")
 
     def _selection_mode_changed(self):
         auto = self.auto_radio.isChecked(); self.auto_target_spin.setEnabled(auto); self.preset_combo.setEnabled(not auto); self.manual_edit.setEnabled(not auto)
@@ -567,28 +183,6 @@ class CVQtMainWindow(QMainWindow):
         if mode == "min" and ev >= sv: return False, "Min 模式要求终止电压低于起始电压。"
         if self.manual_radio.isChecked() and not self._manual_indices(): return False, "手动模式没有有效圈号。"
         return True, ""
-
-    # ------------------------------------------------------------- processing
-    def _start_analysis(self):
-        ok, msg = self._validate_params()
-        if not ok:
-            QMessageBox.warning(self, "参数检查", msg); return
-        params = {
-            "mode": "max" if self.max_radio.isChecked() else "min",
-            "scan_rate_mv": self.scan_spin.value(), "precision_mv": self.precision_spin.value(),
-            "start_voltage": self.start_spin.value(), "end_voltage": self.end_spin.value(),
-            "save_verification": self.verify_check.isChecked(),
-            "selection_mode": "auto" if self.auto_radio.isChecked() else "manual",
-            "auto_target": self.auto_target_spin.value(), "manual_indices": self._manual_indices(),
-            "apply_cut_to_all": self.cut_check.isChecked(), "output_dir": self.output_edit.text().strip() or None,
-        }
-        self.run_btn.setEnabled(False); self.log_edit.clear(); self.statusBar().showMessage("正在处理，请稍候...")
-        self.worker = ProcessingWorker(self.file_paths, params, self); self.worker.log.connect(self._log); self.worker.finishedData.connect(self._analysis_finished); self.worker.failedFatal.connect(self._fatal_worker_error); self.worker.start()
-
-    def _log(self, level, msg):
-        prefix = f"[{level}]"
-        self.log_edit.appendPlainText(f"{prefix} {msg}")
-        self.statusBar().showMessage(str(msg))
 
     def _show_toast(self, text, kind="success", duration=3000):
         try:
@@ -617,96 +211,6 @@ class CVQtMainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _fatal_worker_error(self, text):
-        self.run_btn.setEnabled(True); QMessageBox.critical(self, "分析失败", text)
-
-    def _analysis_finished(self, results, errors):
-        self.run_btn.setEnabled(True)
-        for path, info in results.items():
-            self.analysis_cache[path] = info["df_all"].copy(); self.mode_cache[path] = info["mode"]
-            defaults = [str(x) for x in info["df_filtered"].get("Curve", pd.Series([], dtype=str)).tolist()]
-            self.default_selection_cache[path] = defaults; self.preview_selection_cache[path] = set(defaults)
-        if results:
-            self._sync_file_combos(list(results.keys()))
-            first = next(iter(results)); self._activate_preview(first)
-            self._log("INFO", f"处理完成：成功 {len(results)} 个，失败 {len(errors)} 个。")
-        if errors:
-            text = "\n".join(f"{Path(p).name}：{e}" for p, e in errors.items())
-            QMessageBox.warning(self, "部分文件处理失败", text)
-        elif results:
-            self._show_toast(f"分析完成 · {len(results)} 个文件已保存", "success", 3200)
-
-    # ------------------------------------------------------------- common header / selection
-    def _sync_file_combos(self, paths):
-        self._building_common = True
-        try:
-            for combo in self.common_file_combos:
-                combo.clear()
-                for p in paths: combo.addItem(Path(p).name, p)
-        finally: self._building_common = False
-
-    def _common_file_changed(self, combo):
-        if self._building_common: return
-        p = combo.currentData()
-        if p: self._activate_preview(p)
-
-    def _activate_preview(self, path):
-        if path not in self.analysis_cache: return
-        self.current_preview_path = path; self.current_focus_curve = None
-        self._building_common = True
-        try:
-            for combo in self.common_file_combos:
-                idx = combo.findData(path)
-                if idx >= 0: combo.setCurrentIndex(idx)
-        finally: self._building_common = False
-        self._refresh_common_labels(); self._refresh_reference_combo(); self._refresh_current_tab()
-
-    def _refresh_common_labels(self):
-        # During construction the left controls can emit valueChanged before
-        # _build_global_header() has created these widgets. Treat that phase
-        # as non-refreshable rather than raising AttributeError.
-        required = (
-            "result_mode_label", "result_count_label", "result_state_label",
-            "cycle_select_btn", "run_status_label",
-        )
-        if not all(hasattr(self, name) for name in required):
-            return
-        p = self.current_preview_path
-        if not p: return
-        mode = self.mode_cache.get(p, "max"); count = len(self.analysis_cache.get(p, [])); sm = ScanMode.MAX if mode == "max" else ScanMode.MIN
-        for lab in self.common_mode_labels: lab.setText(f"模式：{sm.display}")
-        for lab in self.common_count_labels: lab.setText(f"有效循环：{count}")
-        selected = sorted(self.preview_selection_cache.get(p, set()), key=self.curve_no)
-        text = ", ".join(c.replace("CURVE", "") for c in selected) if selected else "未选择圈数"
-        for btn in self.common_cycle_buttons: btn.setText(text)
-
-    def _valid_curve_names(self):
-        p = self.current_preview_path
-        if not p or p not in self.analysis_cache: return []
-        return sorted([str(x) for x in self.analysis_cache[p]["Curve"].dropna().tolist()], key=self.curve_no)
-
-    def _open_cycle_selector(self):
-        names = self._valid_curve_names()
-        if not names: QMessageBox.information(self, "选择显示圈数", "请先完成分析。") ; return
-        dlg = CycleSelectorDialog(names, self.preview_selection_cache.get(self.current_preview_path, set()), self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.preview_selection_cache[self.current_preview_path] = set(dlg.selected_curves()); self._refresh_common_labels(); self._refresh_current_tab()
-
-    def _select_all_preview(self):
-        if self.current_preview_path: self.preview_selection_cache[self.current_preview_path] = set(self._valid_curve_names()); self._refresh_common_labels(); self._refresh_current_tab()
-    def _clear_preview(self):
-        if self.current_preview_path: self.preview_selection_cache[self.current_preview_path] = set(); self._refresh_common_labels(); self._refresh_current_tab()
-    def _restore_default_preview(self):
-        if self.current_preview_path: self.preview_selection_cache[self.current_preview_path] = set(self.default_selection_cache.get(self.current_preview_path, [])); self._refresh_common_labels(); self._refresh_current_tab()
-
-    def _selected_df(self):
-        p = self.current_preview_path
-        if not p or p not in self.analysis_cache: return pd.DataFrame()
-        selected = self.preview_selection_cache.get(p, set())
-        df = self.analysis_cache[p]
-        return df[df["Curve"].isin(selected)].copy().sort_values("Curve", key=lambda s: s.map(self.curve_no)) if selected else df.iloc[0:0].copy()
-
-    # ------------------------------------------------------------- raw data
     def _load_raw_curves(self, path=None, force_retry=False):
         """Return raw CV curves for preview, retrying failed/empty cache entries.
 
@@ -745,145 +249,6 @@ class CVQtMainWindow(QMainWindow):
             self.raw_curve_cache.pop(p, None)
             self._log("ERROR", f"CV原始曲线读取失败：{Path(p).name}：{exc}；后续刷新将允许重试。")
             return {}
-
-    # ------------------------------------------------------------- plotting
-    def _refresh_current_tab(self, *args):
-        idx = self.tabs.currentIndex()
-        [self._refresh_cv, self._refresh_peak, self._refresh_onset, self._refresh_shift, self._refresh_qc][idx]()
-
-    def _refresh_cv(self, *args):
-        panel = self.cv_plot
-        charge_panel = self.charge_plot
-        p = self.current_preview_path
-        dfres = self._selected_df()
-        if not p or dfres.empty:
-            panel.show_empty("请先完成分析并选择显示圈数")
-            charge_panel.show_empty("完成分析后显示库伦电荷")
-            return
-
-        curves = self._load_raw_curves()
-        mode = self.mode_cache.get(p, "max")
-        cols = self.mode_columns(mode)
-        ax = panel.prepare("CV 曲线\nCV Curves", "电位 / Potential (V)", "电流 / Current (A)")
-        selected = sorted(self.preview_selection_cache.get(p, set()), key=self.curve_no)
-        gradient = matplotlib.colors.LinearSegmentedColormap.from_list(
-            "cv_blue_purple", ["#6EC8FF", "#4C8DFF", "#5165D6", "#8A5CF6"]
-        )
-        denom = max(len(selected) - 1, 1)
-
-        for i, curve in enumerate(selected):
-            if curve not in curves:
-                continue
-            raw = _clean_numeric_curve(curves[curve])
-            if raw.empty:
-                continue
-            try:
-                marker_df, _ = _extract_forward_scan(raw, mode)
-            except Exception:
-                marker_df = raw
-            drawdf = marker_df if self.cv_analysis.isChecked() else raw
-            v = drawdf["Vf"].to_numpy(float)
-            im = drawdf["Im"].to_numpy(float)
-            color = gradient(i / denom)
-            smooth, _ = _smooth_current_by_voltage(v, im, FEATURE_SMOOTH_MV)
-
-            if self.cv_raw.isChecked() or self.cv_both.isChecked():
-                line, = ax.plot(
-                    v, im, lw=2.0 if curve != self.current_focus_curve else 2.8,
-                    color=color, alpha=0.94, label=curve if self.cv_legend.isChecked() else None,
-                    antialiased=True
-                )
-                def tt(event, c=curve, vv=v, ii=im, m=mode):
-                    if event.xdata is None:
-                        return c
-                    idx = int(np.argmin(np.abs(vv - event.xdata)))
-                    return format_cv_tooltip(c, vv[idx], ii[idx], m)
-                panel.register(line, curve, curve, f"当前：{curve}", tooltip_fn=tt)
-            if self.cv_smooth.isChecked() or self.cv_both.isChecked():
-                ax.plot(
-                    v, smooth, lw=2.0, color=color, alpha=0.82,
-                    linestyle="--" if self.cv_both.isChecked() else "-", antialiased=True
-                )
-
-            row = dfres[dfres["Curve"] == curve]
-            if row.empty:
-                continue
-            row = row.iloc[0]
-
-            mv = marker_df["Vf"].to_numpy(float)
-            mi = marker_df["Im"].to_numpy(float)
-            def marker_current(potential):
-                if not _valid_number(potential) or len(mv) == 0:
-                    return np.nan
-                idx = int(np.nanargmin(np.abs(mv - float(potential))))
-                return float(mi[idx])
-
-            if self.cv_peak.isChecked() and _valid_number(row.get(cols["peak"])):
-                pv = float(row[cols["peak"]])
-                pi = float(row.get(cols["current"], marker_current(pv)))
-                st = self.normalize_status(row.get("Peak_status"))
-                sc = ax.scatter([pv], [pi], marker="^", s=72, color=color,
-                                edgecolors=STATUS_COLORS.get(st, "#64748B"), linewidths=1.8, zorder=6)
-                panel.register(sc, curve, format_peak_tooltip(curve, pv, pi, st, mode),
-                               f"{curve}｜Peak {pv:.4f} V")
-
-            if self.cv_onset.isChecked():
-                tqc = self.normalize_status(row.get("Threshold_QC"))
-                gqc = self.normalize_status(row.get("Tangent_QC"))
-                tooltip = format_onset_tooltip(
-                    curve, row.get(cols["threshold"]), row.get(cols["tangent"]),
-                    row.get("Onset_difference (mV)"), tqc, gqc
-                )
-                if _valid_number(row.get(cols["threshold"])):
-                    ov = float(row[cols["threshold"]]); oi = marker_current(ov)
-                    sc = ax.scatter([ov], [oi], marker="o", s=62, color=color,
-                                    edgecolors=STATUS_COLORS.get(tqc, "#64748B"), linewidths=1.8, zorder=6)
-                    panel.register(sc, curve, tooltip, f"{curve}｜Threshold onset {ov:.4f} V｜QC {tqc}")
-                if _valid_number(row.get(cols["tangent"])):
-                    ov = float(row[cols["tangent"]]); oi = marker_current(ov)
-                    sc = ax.scatter([ov], [oi], marker="D", s=58, facecolors="white",
-                                    edgecolors=STATUS_COLORS.get(gqc, color), linewidths=1.8, zorder=6)
-                    panel.register(sc, curve, tooltip, f"{curve}｜Tangent onset {ov:.4f} V｜QC {gqc}")
-
-        if self.cv_legend.isChecked() and selected:
-            leg = ax.legend(fontsize=9, framealpha=0.82, loc="upper left")
-            if leg is not None:
-                leg.get_frame().set_facecolor(panel._colors["tooltip_bg"])
-                leg.get_frame().set_edgecolor(panel._colors["spine"])
-                for t in leg.get_texts():
-                    t.set_color(panel._colors["text"])
-                    t.set_fontfamily(MATPLOTLIB_FONT)
-        panel.draw()
-
-        # Charge bar chart: Qox in Max mode / Qred in Min mode.
-        charge_name_cn = "氧化库伦电荷" if mode == "max" else "还原库伦电荷"
-        charge_name_en = "Oxidation Charge" if mode == "max" else "Reduction Charge"
-        cax = charge_panel.prepare(
-            f"{charge_name_cn}\n{charge_name_en}",
-            "循环圈数 / Cycle", cols["charge"]
-        )
-        x = np.array([self.curve_no(c) for c in dfres["Curve"]], float)
-        q = pd.to_numeric(dfres.get(cols["charge"], pd.Series(np.nan, index=dfres.index)), errors="coerce").to_numpy(float)
-        valid = np.isfinite(q)
-        if valid.any():
-            colors = [gradient(i / max(len(x)-1, 1)) for i in range(len(x))]
-            bars = cax.bar(x[valid], q[valid], width=0.62,
-                           color=[colors[i] for i in np.where(valid)[0]],
-                           edgecolor="none", alpha=0.92)
-            cax.set_xticks(x)
-            for rect, (_, row) in zip(bars, dfres.loc[valid].iterrows()):
-                curve = str(row["Curve"])
-                value = row.get(cols["charge"])
-                charge_panel.register(
-                    rect, curve,
-                    f"{curve}\n{charge_name_en} / {charge_name_cn}：{float(value):.3E} C",
-                    f"{curve}｜{cols['charge']} {float(value):.3E} C"
-                )
-            cax.ticklabel_format(axis="y", style="sci", scilimits=(-3, 3))
-            charge_panel.draw()
-        else:
-            charge_panel.show_empty("当前所选循环没有可用的库伦电荷结果")
-
 
     def _refresh_peak(self, *args):
         df = self._selected_df(); panel = self.peak_plot
@@ -983,17 +348,6 @@ class CVQtMainWindow(QMainWindow):
         panel.apply_legend(enabled=bool(series))
         panel.draw()
         self._fill_table(self.onset_table, df, ["Curve", cols["threshold"], cols["tangent"]])
-
-    def _refresh_reference_combo(self):
-        if not hasattr(self, "ref_combo"): return
-        names = self._valid_curve_names(); current = self.ref_combo.currentText(); self.ref_combo.blockSignals(True); self.ref_combo.clear(); self.ref_combo.addItems(names)
-        if current in names: self.ref_combo.setCurrentText(current)
-        elif "CURVE1" in names: self.ref_combo.setCurrentText("CURVE1")
-        elif names: self.ref_combo.setCurrentIndex(0)
-        self.ref_combo.blockSignals(False)
-
-    def _reference_changed(self, text):
-        if text: self.statusBar().showMessage(TEXT["reference_changed"].format(reference=text)); self._refresh_shift()
 
     def _dynamic_shift_df(self):
         df = self._selected_df()
@@ -1126,12 +480,10 @@ class CVQtMainWindow(QMainWindow):
         ]
         self._fill_table(self.qc_table, view, cols, ["Peak_status", "Threshold_QC", "Tangent_QC", "Scan_QC"])
 
-
     def _reset_qc(self):
         for cb in self.qc_filters.values(): cb.setChecked(True)
         self.qc_only_abnormal.setChecked(False); self._refresh_qc()
 
-    # ------------------------------------------------------------- tables
     def _fill_table(self, table, df, columns, status_columns=None):
         status_columns = status_columns or []
         columns = [c for c in columns if c in df.columns] if not df.empty else columns
@@ -1185,56 +537,6 @@ class CVQtMainWindow(QMainWindow):
             # 多列表保持水平滚动；少列表分支上方已在设置列模式后启用最后一列拉伸。
             header.setStretchLastSection(False)
 
-
-    # ------------------------------------------------------------- linkage
-    def _plot_curve_clicked(self, curve, double_click):
-        self.current_focus_curve = curve
-        if curve not in self.preview_selection_cache.get(self.current_preview_path, set()): self.preview_selection_cache[self.current_preview_path].add(curve); self._refresh_common_labels()
-        if double_click:
-            self.tabs.setCurrentWidget(self.cv_tab); self.cv_peak.setChecked(True); self.cv_onset.setChecked(True); self.statusBar().showMessage(TEXT["curve_located"].format(curve=curve)); self._refresh_cv()
-        else:
-            self._refresh_current_tab()
-
-    def _table_selected(self, key, table):
-        rows = table.selectionModel().selectedRows()
-        if not rows or table.columnCount()==0: return
-        curve = table.item(rows[0].row(),0).text() if table.item(rows[0].row(),0) else ""
-        if curve.startswith("CURVE"): self.current_focus_curve=curve; self.statusBar().showMessage(f"已选中 {curve}")
-
-    def _table_double_clicked(self, key, table):
-        rows=table.selectionModel().selectedRows()
-        if not rows: return
-        curve=table.item(rows[0].row(),0).text() if table.item(rows[0].row(),0) else ""
-        if curve.startswith("CURVE"):
-            self.current_focus_curve=curve; self.preview_selection_cache.setdefault(self.current_preview_path,set()).add(curve); self.tabs.setCurrentWidget(self.cv_tab); self.cv_peak.setChecked(True); self.cv_onset.setChecked(True); self._refresh_common_labels(); self._refresh_cv(); self.statusBar().showMessage(TEXT["curve_located"].format(curve=curve))
-
-    def _about(self):
-        QMessageBox.information(self, "关于", "Electrolyte CV Processor v2.0\n\n界面基于 PySide6 / Qt 重构，风格参考 BatteryCVAnalyzer。\n保留积分、Peak、双方法 Onset、Shift、QC 与 4-Sheet Excel 输出。")
-
-
-class AnalysisStatus(str, Enum):
-    NOT_ANALYZED = "not_analyzed"
-    READY = "ready"
-    OUTDATED = "outdated"
-    PROCESSING = "processing"
-    FAILED = "failed"
-
-
-@dataclass
-class FileState:
-    path: str
-    status: AnalysisStatus = AnalysisStatus.NOT_ANALYZED
-    parameter_snapshot: Optional[dict] = None
-    draft_params: Optional[dict] = None
-    selected_cycles: set = field(default_factory=set)
-    default_cycles: list = field(default_factory=list)
-    reference_curve: Optional[str] = None
-    last_error: Optional[str] = None
-
-
-class CVQtMainWindowV19(CVQtMainWindow):
-    """v2.0: six-tab UI + per-file state + outdated/diagnostic contexts."""
-
     def __init__(self):
         QMainWindow.__init__(self)
         self.setWindowTitle("Electrolyte CV Processor v2.0")
@@ -1249,7 +551,6 @@ class CVQtMainWindowV19(CVQtMainWindow):
         self.mode_cache = {}
         self.default_selection_cache = {}
         self.preview_selection_cache = {}
-        self.parameter_snapshot_cache = {}
 
         self.current_preview_path = None
         self.current_focus_curve = None
@@ -1264,9 +565,6 @@ class CVQtMainWindowV19(CVQtMainWindow):
 
         self.theme = "light"
         self.common_file_combos = []
-        self.common_cycle_buttons = []
-        self.common_mode_labels = []
-        self.common_count_labels = []
         self.table_map = {}
         self.plot_map = {}
         self._building_common = False
@@ -1787,13 +1085,12 @@ class CVQtMainWindowV19(CVQtMainWindow):
         self.result_mode_label = QLabel("模式：—"); self.result_mode_label.setProperty("muted", True)
         self.result_count_label = QLabel("有效循环：0"); self.result_count_label.setProperty("muted", True)
         self.result_state_label = QLabel("尚未分析"); self.result_state_label.setProperty("state", "idle")
-        self.common_mode_labels = [self.result_mode_label]; self.common_count_labels = [self.result_count_label]
         top.addWidget(self.result_mode_label); top.addWidget(self.result_count_label); top.addWidget(self.result_state_label)
         layout.addLayout(top)
 
         cyc = QHBoxLayout(); cyc.setSpacing(7); cyc.addWidget(QLabel("显示圈数"))
         self.cycle_select_btn = self._mark_secondary(QPushButton("未选择圈数")); self.cycle_select_btn.clicked.connect(self._open_cycle_selector)
-        self.common_cycle_buttons = [self.cycle_select_btn]; cyc.addWidget(self.cycle_select_btn, 1)
+        cyc.addWidget(self.cycle_select_btn, 1)
         b_all = self._mark_tertiary(QPushButton("全选")); b_clear = self._mark_tertiary(QPushButton("清空")); b_def = self._mark_tertiary(QPushButton("恢复默认"))
         b_all.clicked.connect(self._select_all_preview); b_clear.clicked.connect(self._clear_preview); b_def.clicked.connect(self._restore_default_preview)
         cyc.addWidget(b_all); cyc.addWidget(b_clear); cyc.addWidget(b_def); layout.addLayout(cyc)

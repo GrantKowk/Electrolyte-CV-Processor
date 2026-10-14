@@ -9,13 +9,6 @@ class QCStatus(str, Enum):
     FAILED = "Failed"
 
 
-class MessageLevel(str, Enum):
-    INFO = "info"
-    SUCCESS = "success"
-    WARNING = "warning"
-    ERROR = "error"
-
-
 class ScanMode(str, Enum):
     MAX = "max"
     MIN = "min"
@@ -42,7 +35,6 @@ STATUS_COLORS = {
 
 TEXT = {
     "reference_changed": "参考圈已更改为 {reference}，位移结果已重新计算。",
-    "curve_located": "已定位到 {curve}，请检查峰值和起始电位标记。",
 }
 
 # ================== 配置常量 ==================
@@ -61,7 +53,6 @@ FEATURE_ONSET_PERSIST_MV = 15.0
 FEATURE_TANGENT_LOW_FRAC = 0.10
 FEATURE_TANGENT_HIGH_FRAC = 0.40
 FEATURE_TANGENT_R2_MIN = 0.98
-FEATURE_ONSET_QC_TOL_MV = 50.0
 FEATURE_BOUNDARY_MV = 30.0
 
 # 不同模式下电压默认值 (单位: V)

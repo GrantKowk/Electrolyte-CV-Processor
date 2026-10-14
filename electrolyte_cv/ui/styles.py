@@ -173,8 +173,6 @@ QScrollBar::add-line, QScrollBar::sub-line { width:0; height:0; }
 QStatusBar { background:#111827; color:#94A3B8; border-top:1px solid #334155; }
 """
 
-APP_STYLE = LIGHT_STYLE
-
 V19_LIGHT_STYLE = LIGHT_STYLE + r"""
 QPushButton[secondary="true"] {
     background: #EEF6FF; color: #1769C2; border: 1px solid #B8D5F4;
