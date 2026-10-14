@@ -1,0 +1,36 @@
+# Publish only application files. All other files are ignored by default.
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/requirements.txt
+!/requirements-build.txt
+!/version_info.txt
+!/main.py
+!/ElectrolyteCVProcessor.spec
+!/assets/
+/assets/*
+!/assets/app_icon.ico
+!/assets/app_icon.png
+!/electrolyte_cv/
+/electrolyte_cv/**
+!/electrolyte_cv/**/
+!/electrolyte_cv/**/*.py
+
+# Never commit measurement data, fixtures, results, caches, or local settings.
+**/tests/
+**/data/
+**/sample_data/
+**/fixtures/
+**/__pycache__/
+**/*.pyc
+**/*.dta
+**/*.DTA
+**/*.csv
+**/*.xlsx
+**/*.xls
+**/*.tsv
+**/*.json
+**/*.log
+**/*.db
+**/*.sqlite*
