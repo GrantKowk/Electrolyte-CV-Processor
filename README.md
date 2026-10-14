@@ -1,4 +1,4 @@
-# Electrolyte CV Processor v2.0
+# Electrolyte CV Processor
 
 用于电解液循环伏安（CV）数据处理的桌面工具，提供中文界面。基于 Python、PySide6 和 Matplotlib。
 
@@ -6,9 +6,7 @@ A desktop application for electrolyte cyclic voltammetry analysis, plotting, and
 
 **版本：v2.0 · 启动入口：`main.py` · 程序主体：`electrolyte_cv/`**
 
-本仓库仅发布程序源码和运行、构建所需文件，不包含 DTA、Excel、测试数据或处理结果。
-
-[功能](#features--功能) · [安装与运行](#run--运行) · [源码结构](#source-layout--源码结构) · [使用方法](#usage--使用) · [Windows 打包](#windows-build--windows-打包) · [数据隐私](#privacy--数据隐私)
+[功能](#features--功能) · [安装与运行](#run--运行) · [源码结构](#source-layout--源码结构) · [使用方法](#usage--使用) · [Windows 打包](#windows-build--windows-打包) · [许可证](#license--许可证)
 
 ## Features / 功能
 
@@ -34,20 +32,40 @@ On other platforms, use the virtual environment's Python executable. A graphical
 
 ```text
 Electrolyte-CV-Processor/
-├── main.py                       # 启动入口
-├── electrolyte_cv/               # v2.0 程序主体
-│   ├── app.py                    # 初始化并启动 Qt 应用
-│   ├── core/                     # 数据解析、分析、绘图与导出
-│   ├── ui/                       # 主窗口、设置对话框与界面控件
-│   ├── resources.py              # 资源路径管理
-│   └── settings_manager.py       # 本机偏好设置
-├── assets/                       # 应用图标
-├── requirements.txt              # 运行依赖
-├── requirements-build.txt        # 打包依赖
-├── ElectrolyteCVProcessor.spec   # PyInstaller 构建配置
-├── version_info.txt              # Windows 可执行文件版本信息
-├── .gitignore                    # 限定允许提交的文件
-└── README.md
+├── electrolyte_cv/                   # 应用源码
+│   ├── core/                         # 数据处理与分析
+│   │   ├── __init__.py
+│   │   ├── analysis.py
+│   │   ├── config.py
+│   │   ├── cv_plot_pipeline.py
+│   │   ├── export.py
+│   │   ├── formatting.py
+│   │   ├── logging_utils.py
+│   │   ├── parsers.py
+│   │   ├── plot_helpers.py
+│   │   └── processor.py
+│   ├── ui/                           # 桌面界面
+│   │   ├── __init__.py
+│   │   ├── main_window.py
+│   │   ├── preferences_dialog.py
+│   │   ├── qt_compat.py
+│   │   ├── styles.py
+│   │   └── widgets.py
+│   ├── __init__.py
+│   ├── app.py                        # Qt 应用入口
+│   ├── resources.py                  # 资源路径管理
+│   └── settings_manager.py           # 本机偏好设置
+├── assets/                           # 应用图标
+│   ├── app_icon.ico
+│   └── app_icon.png
+├── packaging/                        # Windows 打包配置
+│   ├── ElectrolyteCVProcessor.spec
+│   ├── requirements-build.txt
+│   └── version_info.txt
+├── LICENSE                           # MIT 许可证
+├── main.py                           # 启动脚本
+├── README.md                         # 项目说明
+└── requirements.txt                  # 运行依赖
 ```
 
 | 想查看的功能 | 源码位置 |
@@ -71,16 +89,14 @@ Check units and scan settings against your measurement method before interpretin
 ## Windows build / Windows 打包
 
 ```powershell
-python -m pip install -r requirements-build.txt
-python -m PyInstaller --clean --noconfirm ElectrolyteCVProcessor.spec
+.venv\Scripts\python -m pip install -r requirements.txt -r packaging/requirements-build.txt
+.venv\Scripts\python -m PyInstaller --clean --noconfirm packaging/ElectrolyteCVProcessor.spec
 ```
 
-The executable is written to `dist/`. Installer tooling and prebuilt executables are not part of this source publication.
+The executable is written to `dist/`.
 
-## Privacy / 数据隐私
+## License / 许可证
 
-This repository contains application source, interface icons, dependency lists, and build configuration only. No experimental data, test fixtures, sample datasets, generated results, local settings, or historical test reports are included. Supply your own data locally. The application processes files on your computer.
+本项目源码采用 [MIT 许可证](LICENSE)。允许使用、修改、分发及商用，使用者需要保留版权与许可证声明。软件按现状提供，不作担保；完整条款请参阅 `LICENSE`。
 
-本仓库不公开任何实验数据、测试数据、样例数据或处理结果；请在本机使用自己的数据。压缩包中的 `tests/`、`legacy/`、历史测试报告和辅助开发工具均未纳入本次发布。
-
-`.gitignore` 采用允许清单，只允许提交指定源码、图标、文档及构建配置，并排除 DTA、Excel、CSV 等数据文件。提交前仍请检查 Git 暂存清单，避免通过强制添加等方式将私人数据纳入版本历史。
+Application source is licensed under MIT. Third-party dependencies remain under their respective licenses.
