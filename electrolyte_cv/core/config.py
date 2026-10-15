@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from ..i18n import tr
 
 class QCStatus(str, Enum):
     OK = "OK"
@@ -23,7 +24,7 @@ class ScanMode(str, Enum):
 
     @property
     def display(self):
-        return f"{self.cn} / {'Max' if self == ScanMode.MAX else 'Min'}"
+        return f"{tr(self.cn)} / {'Max' if self == ScanMode.MAX else 'Min'}"
 
 
 STATUS_COLORS = {
@@ -37,13 +38,13 @@ TEXT = {
     "reference_changed": "参考圈已更改为 {reference}，位移结果已重新计算。",
 }
 
-# ================== 配置常量 ==================
+# ================== Configuration constants ==================
 SUPPORTED_EXTENSIONS = ('.dta', '.txt', '.xlsx', '.xls')
 DEFAULT_MODE = 'max'
 DEFAULT_SCAN_RATE_MV = 5
 DEFAULT_PRECISION_MV = 5
 
-# 特征电位分析默认参数（以电压宽度而不是固定点数定义，适配不同采样密度）
+# Define feature-analysis widths in voltage units to accommodate different sampling densities.
 FEATURE_SMOOTH_MV = 15.0
 FEATURE_BASELINE_FRACTION = 0.20
 FEATURE_BASELINE_MIN_MV = 150.0
@@ -55,13 +56,13 @@ FEATURE_TANGENT_HIGH_FRAC = 0.40
 FEATURE_TANGENT_R2_MIN = 0.98
 FEATURE_BOUNDARY_MV = 30.0
 
-# 不同模式下电压默认值 (单位: V)
+# Default voltages by analysis mode (V).
 DEFAULT_VOLTAGE = {
     'max': {'start': 2.7, 'end': 4.5},
     'min': {'start': 3.0, 'end': 0.01}
 }
 
-# 手动模式预设方案（圈号列表）
+# Manual cycle-selection presets.
 PRESET_SCHEMES = {
     "十圈选点": [1, 3, 5, 7, 10],
     "二十圈选点": [1, 5, 10, 15, 20],

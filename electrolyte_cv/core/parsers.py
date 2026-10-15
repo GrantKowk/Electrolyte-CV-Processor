@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from ..i18n import tr
+
 import re
 import pandas as pd
 
 from .logging_utils import log_info, log_warning
 
 def parse_txt_to_curves(txt_path):
-    """解析电化学 TXT 文件，提取每个 CURVE 的 Vf 和 Im 数据"""
-    log_info(f"正在解析 TXT 文件：{txt_path}")
+    "Parse electrochemical TXT files and extract Vf and Im for each CURVE."
+    log_info(tr('正在解析 TXT 文件：{0}', txt_path))
     with open(txt_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
@@ -33,7 +35,7 @@ def parse_txt_to_curves(txt_path):
                         df = df.iloc[:, [2, 3]].copy()
                         df.columns = ['Vf', 'Im']
                     else:
-                        log_warning(f"曲线 {current_curve} 列数不足，跳过")
+                        log_warning(tr('曲线 {0} 列数不足，跳过', current_curve))
                         df = None
                 if df is not None and not df.empty:
                     curves[current_curve] = df
@@ -74,20 +76,20 @@ def parse_txt_to_curves(txt_path):
                 df = df.iloc[:, [2, 3]].copy()
                 df.columns = ['Vf', 'Im']
             else:
-                log_warning(f"曲线 {current_curve} 列数不足，跳过")
+                log_warning(tr('曲线 {0} 列数不足，跳过', current_curve))
                 df = None
         if df is not None and not df.empty:
             curves[current_curve] = df
 
     if not curves:
-        raise ValueError("未解析到任何 CURVE 数据，请检查文件格式")
-    log_info(f"成功解析 {len(curves)} 条曲线")
+        raise ValueError(tr('未解析到任何 CURVE 数据，请检查文件格式'))
+    log_info(tr('成功解析 {0} 条曲线', len(curves)))
     return curves
 
-# ================== 解析器：Excel（原始三列格式） ==================
+# ================== Excel parser (legacy three-column format) ==================
 def parse_excel_to_curves(excel_path):
-    """解析旧格式 Excel（三列无表头，CURVE 标识在 A 列）"""
-    log_info(f"正在解析 Excel 文件（旧格式）：{excel_path}")
+    "Parse legacy Excel files with three headerless columns and CURVE markers in column A."
+    log_info(tr('正在解析 Excel 文件（旧格式）：{0}', excel_path))
     df_raw = pd.read_excel(excel_path, header=None, names=['A', 'B', 'C'], dtype=str)
     curves = {}
     i = 0
@@ -113,6 +115,6 @@ def parse_excel_to_curves(excel_path):
         else:
             i += 1
     if not curves:
-        raise ValueError("未解析到任何 CURVE 数据，请检查 Excel 格式")
-    log_info(f"成功解析 {len(curves)} 条曲线")
+        raise ValueError(tr('未解析到任何 CURVE 数据，请检查 Excel 格式'))
+    log_info(tr('成功解析 {0} 条曲线', len(curves)))
     return curves

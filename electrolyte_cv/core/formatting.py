@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..i18n import tr
+
 import numpy as np
 import pandas as pd
 
@@ -30,43 +32,29 @@ def fmt_shift(value) -> str:
 def format_cv_tooltip(curve, potential, current, mode):
     sm = ScanMode.MAX if mode == 'max' else ScanMode.MIN
     return (
-        f"{curve}\n\n"
-        f"Potential / 电位：{fmt_potential(potential)}\n"
-        f"Current / 电流：{fmt_current(current)}\n"
-        f"Scan / 扫描支：{sm.en} / {sm.cn}"
+        tr('{0}\n\nPotential / 电位：{1}\nCurrent / 电流：{2}\nScan / 扫描支：{3} / {4}', curve, fmt_potential(potential), fmt_current(current), sm.en, sm.cn)
     )
 
 
 def format_peak_tooltip(curve, peak_potential, peak_current, status, mode):
     sm = ScanMode.MAX if mode == 'max' else ScanMode.MIN
     text = (
-        f"{curve} · {sm.en} Peak / {sm.cn}峰\n\n"
-        f"Peak potential / 峰电位：{fmt_potential(peak_potential)}\n"
-        f"Peak current / 峰电流：{fmt_current(peak_current)}\n"
-        f"Peak status / 峰状态：{status}"
+        tr('{0} · {1} Peak / {2}峰\n\nPeak potential / 峰电位：{3}\nPeak current / 峰电流：{4}\nPeak status / 峰状态：{5}', curve, sm.en, sm.cn, fmt_potential(peak_potential), fmt_current(peak_current), status)
     )
     if status == QCStatus.BOUNDARY.value:
-        text += "\n\n峰位靠近扫描边界，可能尚未形成完整峰。"
+        text += tr('\n\n峰位靠近扫描边界，可能尚未形成完整峰。')
     elif status == QCStatus.FAILED.value:
-        text += "\n\n未识别到可靠峰值。"
+        text += tr('\n\n未识别到可靠峰值。')
     return text
 
 
 def format_onset_tooltip(curve, threshold_onset, tangent_onset, difference_mv, threshold_qc, tangent_qc):
     return (
-        f"{curve} · Onset\n\n"
-        f"Threshold / 阈值法：{fmt_potential(threshold_onset)}\n"
-        f"Threshold QC：{threshold_qc}\n"
-        f"Tangent / 切线法：{fmt_potential(tangent_onset)}\n"
-        f"Tangent QC：{tangent_qc}\n"
-        f"Difference / 方法差值：{(f'{float(difference_mv):.1f} mV' if _valid_number(difference_mv) else 'N/A')}"
+        tr('{0} · Onset\n\nThreshold / 阈值法：{1}\nThreshold QC：{2}\nTangent / 切线法：{3}\nTangent QC：{4}\nDifference / 方法差值：{5}', curve, fmt_potential(threshold_onset), threshold_qc, fmt_potential(tangent_onset), tangent_qc, f'{float(difference_mv):.1f} mV' if _valid_number(difference_mv) else 'N/A')
     )
 
 
 def format_shift_tooltip(curve, reference, peak_shift_mv, threshold_shift_mv, tangent_shift_mv):
     return (
-        f"{curve}\n\nReference / 参考圈：{reference}\n"
-        f"Peak shift / 峰位移：{fmt_shift(peak_shift_mv)}\n"
-        f"Threshold onset shift / 阈值法起始电位位移：{fmt_shift(threshold_shift_mv)}\n"
-        f"Tangent onset shift / 切线法起始电位位移：{fmt_shift(tangent_shift_mv)}"
+        tr('{0}\n\nReference / 参考圈：{1}\nPeak shift / 峰位移：{2}\nThreshold onset shift / 阈值法起始电位位移：{3}\nTangent onset shift / 切线法起始电位位移：{4}', curve, reference, fmt_shift(peak_shift_mv), fmt_shift(threshold_shift_mv), fmt_shift(tangent_shift_mv))
     )

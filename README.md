@@ -1,18 +1,25 @@
 # Electrolyte CV Processor
 
-用于电解液循环伏安（CV）数据处理的桌面工具，提供中文界面。基于 Python、PySide6 和 Matplotlib。
+<details open>
+<summary>Languages</summary>
 
-## 功能
+**English** · [简体中文](docs/readme/README.zh-CN.md) · [繁體中文](docs/readme/README.zh-TW.md) · [日本語](docs/readme/README.ja.md) · [한국어](docs/readme/README.ko.md) · [Deutsch](docs/readme/README.de.md) · [Français](docs/readme/README.fr.md) · [Español](docs/readme/README.es.md) · [Italiano](docs/readme/README.it.md) · [Português (Brasil)](docs/readme/README.pt-BR.md) · [Русский](docs/readme/README.ru.md) · [Українська](docs/readme/README.uk.md) · [Polski](docs/readme/README.pl.md) · [Nederlands](docs/readme/README.nl.md) · [Svenska](docs/readme/README.sv.md) · [Suomi](docs/readme/README.fi.md) · [Čeština](docs/readme/README.cs.md) · [Türkçe](docs/readme/README.tr.md) · [Ελληνικά](docs/readme/README.el.md) · [العربية](docs/readme/README.ar.md) · [فارسی](docs/readme/README.fa.md) · [עברית](docs/readme/README.he.md) · [हिन्दी](docs/readme/README.hi.md) · [বাংলা](docs/readme/README.bn.md) · [اردو](docs/readme/README.ur.md) · [Bahasa Indonesia](docs/readme/README.id.md) · [Bahasa Melayu](docs/readme/README.ms.md) · [Tiếng Việt](docs/readme/README.vi.md) · [ไทย](docs/readme/README.th.md) · [Română](docs/readme/README.ro.md)
 
-- 导入 Gamry DTA/TXT 及支持的 Excel 曲线文件。
-- 自动或手动选择循环，分析氧化与还原扫描。
-- 根据扫描速率计算积分面积与电荷。
-- 查看 CV 曲线、峰电位、起始电位、相对参考循环的偏移及质量检查结果。
-- 导出 Excel 和图像，保存显示与处理偏好。
+</details>
 
-## 运行
+A desktop tool for electrolyte cyclic voltammetry (CV) analysis, built with Python, PySide6 and Matplotlib. The interface supports English and Simplified Chinese; English is the default.
 
-Windows，Python 3.10 或更高版本。
+## Features
+
+- Import Gamry DTA/TXT and supported Excel curve files.
+- Select cycles automatically or manually and analyze oxidation or reduction scans.
+- Calculate integrated areas and charge from the configured scan rate.
+- View CV curves, peak and onset potentials, shifts relative to a reference cycle, and quality checks.
+- Export Excel workbooks and figures; save display and processing preferences.
+
+## Run
+
+Windows, Python 3.10 or newer. Run these commands from the project root.
 
 ```powershell
 python -m venv .venv
@@ -20,21 +27,53 @@ python -m venv .venv
 .venv\Scripts\python main.py
 ```
 
-## 使用
+## Usage
 
-1. 添加 CV 文件。文本曲线表需包含 `CURVE... TABLE`、`Vf` 和 `Im` 列。
-2. 设置分析模式、电压范围、扫描速率和循环选择。
-3. 运行处理，查看分析结果并导出。
+1. Add CV files. Text curve tables must contain `CURVE... TABLE` sections with `Vf` and `Im` columns.
+2. Set the analysis mode, voltage range, scan rate and cycle selection.
+3. Run processing, inspect the results and export.
+4. Switch the interface language through **Settings → Language** or **Settings → Preferences**. Your choice is saved.
 
-## 源码结构
+## Source layout
 
 ```text
 Electrolyte-CV-Processor/
-├── assets/                               # 应用图标
+├── assets/
 │   ├── app_icon.ico
 │   └── app_icon.png
-├── electrolyte_cv/                       # 应用源码
-│   ├── core/                             # 解析、分析与导出
+├── docs/
+│   └── readme/
+│       ├── README.ar.md
+│       ├── README.bn.md
+│       ├── README.cs.md
+│       ├── README.de.md
+│       ├── README.el.md
+│       ├── README.es.md
+│       ├── README.fa.md
+│       ├── README.fi.md
+│       ├── README.fr.md
+│       ├── README.he.md
+│       ├── README.hi.md
+│       ├── README.id.md
+│       ├── README.it.md
+│       ├── README.ja.md
+│       ├── README.ko.md
+│       ├── README.ms.md
+│       ├── README.nl.md
+│       ├── README.pl.md
+│       ├── README.pt-BR.md
+│       ├── README.ro.md
+│       ├── README.ru.md
+│       ├── README.sv.md
+│       ├── README.th.md
+│       ├── README.tr.md
+│       ├── README.uk.md
+│       ├── README.ur.md
+│       ├── README.vi.md
+│       ├── README.zh-CN.md
+│       └── README.zh-TW.md
+├── electrolyte_cv/
+│   ├── core/
 │   │   ├── __init__.py
 │   │   ├── analysis.py
 │   │   ├── config.py
@@ -45,36 +84,37 @@ Electrolyte-CV-Processor/
 │   │   ├── parsers.py
 │   │   ├── plot_helpers.py
 │   │   └── processor.py
-│   ├── ui/                               # 桌面界面
+│   ├── ui/
 │   │   ├── __init__.py
-│   │   ├── main_window.py                # CV 主窗口
+│   │   ├── main_window.py
 │   │   ├── preferences_dialog.py
 │   │   ├── qt_compat.py
 │   │   ├── styles.py
 │   │   └── widgets.py
 │   ├── __init__.py
-│   ├── app.py                            # 应用入口
-│   ├── resources.py                      # 资源路径
-│   └── settings_manager.py               # 偏好设置
-├── packaging/                            # Windows 打包配置
+│   ├── app.py
+│   ├── i18n.py
+│   ├── resources.py
+│   └── settings_manager.py
+├── packaging/
 │   ├── ElectrolyteCVProcessor.spec
 │   ├── requirements-build.txt
 │   └── version_info.txt
-├── LICENSE                               # MIT 许可证
-├── README.md                             # 项目说明
-├── main.py                               # 启动脚本
-└── requirements.txt                      # 运行依赖
+├── LICENSE
+├── README.md
+├── main.py
+└── requirements.txt
 ```
 
-## Windows 打包
+## Windows build
 
 ```powershell
 .venv\Scripts\python -m pip install -r requirements.txt -r packaging/requirements-build.txt
 .venv\Scripts\python -m PyInstaller --clean --noconfirm packaging/ElectrolyteCVProcessor.spec
 ```
 
-生成的可执行文件位于 `dist/`。
+The executable is generated in `dist/`.
 
-## 许可证
+## License
 
 [MIT](LICENSE)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .i18n import tr
+
 import sys
 
 from .ui.qt_compat import PYSIDE6_AVAILABLE, QT_IMPORT_ERROR
@@ -22,9 +24,7 @@ def _set_windows_app_id():
 def run_gui():
     if not PYSIDE6_AVAILABLE:
         raise SystemExit(
-            "未安装 PySide6，无法启动 Qt 界面。\n"
-            "请执行：pip install -r requirements.txt\n"
-            f"导入错误：{QT_IMPORT_ERROR}"
+            tr('未安装 PySide6，无法启动 Qt 界面。\n请执行：pip install -r requirements.txt\n导入错误：{0}', QT_IMPORT_ERROR)
         )
 
     from .ui.qt_compat import QApplication, QFont, QIcon

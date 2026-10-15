@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..i18n import tr
+
 import traceback
 from pathlib import Path
 import numpy as np
@@ -407,9 +409,9 @@ class CopyableTableWidget(QTableWidget):
         if index.isValid() and index.row() not in self._selected_rows():
             self.selectRow(index.row())
         menu = QMenu(self)
-        act_selected = menu.addAction("复制所选")
-        act_all = menu.addAction("复制全部")
-        act_all_header = menu.addAction("复制全部（含表头）")
+        act_selected = menu.addAction(tr('复制所选'))
+        act_all = menu.addAction(tr('复制全部'))
+        act_all_header = menu.addAction(tr('复制全部（含表头）'))
         chosen = menu.exec(self.viewport().mapToGlobal(pos))
         if chosen == act_selected:
             self.copy_selected()
@@ -425,7 +427,7 @@ class LayoutSettingsDialog(QDialog):
     def __init__(self, panel, parent=None):
         super().__init__(parent)
         self.panel = panel
-        self.setWindowTitle("图表布局设置")
+        self.setWindowTitle(tr('图表布局设置'))
         self.setMinimumWidth(410)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 14)
@@ -434,9 +436,9 @@ class LayoutSettingsDialog(QDialog):
         form.setHorizontalSpacing(12); form.setVerticalSpacing(8)
         self.spins = {}
         labels = [
-            ("top", "上边距"), ("bottom", "下边距"),
-            ("left", "左边距"), ("right", "右边距"),
-            ("hspace", "垂直间距"), ("wspace", "水平间距"),
+            ("top", tr('上边距')), ("bottom", tr('下边距')),
+            ("left", tr('左边距')), ("right", tr('右边距')),
+            ("hspace", tr('垂直间距')), ("wspace", tr('水平间距')),
         ]
         for idx, (key, text) in enumerate(labels):
             lab = QLabel(text)
@@ -447,16 +449,16 @@ class LayoutSettingsDialog(QDialog):
             form.addWidget(lab, idx // 2, (idx % 2) * 2)
             form.addWidget(spin, idx // 2, (idx % 2) * 2 + 1)
         root.addLayout(form)
-        self.auto_check = ModernCheckBox("自动紧凑布局")
+        self.auto_check = ModernCheckBox(tr('自动紧凑布局'))
         self.auto_check.setChecked(bool(panel.layout_state.get("auto_layout", False)))
         root.addWidget(self.auto_check)
-        hint = QLabel("手动设置会保留在当前图表页；长图例需要额外空间时会临时预留，不覆盖这里保存的值。")
+        hint = QLabel(tr('手动设置会保留在当前图表页；长图例需要额外空间时会临时预留，不覆盖这里保存的值。'))
         hint.setWordWrap(True); hint.setProperty("muted", True)
         root.addWidget(hint)
         buttons = QHBoxLayout()
-        reset = QPushButton("恢复默认")
-        apply_btn = QPushButton("应用"); apply_btn.setProperty("primary", True)
-        close_btn = QPushButton("关闭")
+        reset = QPushButton(tr('恢复默认'))
+        apply_btn = QPushButton(tr('应用')); apply_btn.setProperty("primary", True)
+        close_btn = QPushButton(tr('关闭'))
         reset.clicked.connect(self._reset)
         apply_btn.clicked.connect(self._apply)
         close_btn.clicked.connect(self.accept)
@@ -488,7 +490,7 @@ class PlotSettingsDialog(QDialog):
     def __init__(self, panel, parent=None):
         super().__init__(parent)
         self.panel = panel
-        self.setWindowTitle("图形设置")
+        self.setWindowTitle(tr('图形设置'))
         self.setMinimumWidth(460)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 14); root.setSpacing(10)
@@ -498,19 +500,19 @@ class PlotSettingsDialog(QDialog):
         self.title_edit = QLineEdit(settings.get("title") if settings.get("title") is not None else defaults.get("title", ""))
         self.x_edit = QLineEdit(settings.get("xlabel") if settings.get("xlabel") is not None else defaults.get("xlabel", ""))
         self.y_edit = QLineEdit(settings.get("ylabel") if settings.get("ylabel") is not None else defaults.get("ylabel", ""))
-        form.addRow("图标题", self.title_edit); form.addRow("X 轴标题", self.x_edit); form.addRow("Y 轴标题", self.y_edit)
+        form.addRow(tr('图标题'), self.title_edit); form.addRow(tr('X 轴标题'), self.x_edit); form.addRow(tr('Y 轴标题'), self.y_edit)
         root.addLayout(form)
 
         opts = QHBoxLayout()
-        self.grid_check = ModernCheckBox("显示网格")
-        self.legend_check = ModernCheckBox("显示图例")
+        self.grid_check = ModernCheckBox(tr('显示网格'))
+        self.legend_check = ModernCheckBox(tr('显示图例'))
         self.grid_check.setChecked(bool(settings.get("grid", True)))
         self.legend_check.setChecked(bool(settings.get("legend_visible", True)))
         opts.addWidget(self.grid_check); opts.addWidget(self.legend_check); opts.addStretch(1)
         root.addLayout(opts)
 
         range_grid = QGridLayout(); range_grid.setHorizontalSpacing(8); range_grid.setVerticalSpacing(8)
-        self.x_auto = ModernCheckBox("X 自动范围"); self.y_auto = ModernCheckBox("Y 自动范围")
+        self.x_auto = ModernCheckBox(tr('X 自动范围')); self.y_auto = ModernCheckBox(tr('Y 自动范围'))
         self.x_auto.setChecked(bool(settings.get("x_auto", True))); self.y_auto.setChecked(bool(settings.get("y_auto", True)))
         self.x_min = NoWheelDoubleSpinBox(); self.x_max = NoWheelDoubleSpinBox(); self.y_min = NoWheelDoubleSpinBox(); self.y_max = NoWheelDoubleSpinBox()
         for sp in (self.x_min, self.x_max, self.y_min, self.y_max):
@@ -519,20 +521,20 @@ class PlotSettingsDialog(QDialog):
         ylim = panel.ax.get_ylim() if panel.ax is not None else (0.0, 1.0)
         sx = settings.get("xlim") or xlim; sy = settings.get("ylim") or ylim
         self.x_min.setValue(float(sx[0])); self.x_max.setValue(float(sx[1])); self.y_min.setValue(float(sy[0])); self.y_max.setValue(float(sy[1]))
-        range_grid.addWidget(self.x_auto, 0, 0); range_grid.addWidget(QLabel("最小"), 0, 1); range_grid.addWidget(self.x_min, 0, 2); range_grid.addWidget(QLabel("最大"), 0, 3); range_grid.addWidget(self.x_max, 0, 4)
-        range_grid.addWidget(self.y_auto, 1, 0); range_grid.addWidget(QLabel("最小"), 1, 1); range_grid.addWidget(self.y_min, 1, 2); range_grid.addWidget(QLabel("最大"), 1, 3); range_grid.addWidget(self.y_max, 1, 4)
+        range_grid.addWidget(self.x_auto, 0, 0); range_grid.addWidget(QLabel(tr('最小')), 0, 1); range_grid.addWidget(self.x_min, 0, 2); range_grid.addWidget(QLabel(tr('最大')), 0, 3); range_grid.addWidget(self.x_max, 0, 4)
+        range_grid.addWidget(self.y_auto, 1, 0); range_grid.addWidget(QLabel(tr('最小')), 1, 1); range_grid.addWidget(self.y_min, 1, 2); range_grid.addWidget(QLabel(tr('最大')), 1, 3); range_grid.addWidget(self.y_max, 1, 4)
         root.addLayout(range_grid)
         self.x_auto.toggled.connect(lambda checked: self._set_range_enabled("x", not checked))
         self.y_auto.toggled.connect(lambda checked: self._set_range_enabled("y", not checked))
         self._set_range_enabled("x", not self.x_auto.isChecked()); self._set_range_enabled("y", not self.y_auto.isChecked())
 
-        style_row = QHBoxLayout(); style_row.addWidget(QLabel("线宽"))
+        style_row = QHBoxLayout(); style_row.addWidget(QLabel(tr('线宽')))
         self.line_width = NoWheelDoubleSpinBox(); self.line_width.setRange(0.5, 5.0); self.line_width.setDecimals(1); self.line_width.setSingleStep(0.1); self.line_width.setValue(float(settings.get("line_width") or 2.0))
-        style_row.addWidget(self.line_width); style_row.addSpacing(16); style_row.addWidget(QLabel("基础字号"))
+        style_row.addWidget(self.line_width); style_row.addSpacing(16); style_row.addWidget(QLabel(tr('基础字号')))
         self.font_size = NoWheelDoubleSpinBox(); self.font_size.setRange(7.0, 18.0); self.font_size.setDecimals(1); self.font_size.setSingleStep(0.5); self.font_size.setValue(float(settings.get("font_size") or 9.5))
         style_row.addWidget(self.font_size); style_row.addStretch(1); root.addLayout(style_row)
 
-        buttons = QHBoxLayout(); reset = QPushButton("恢复默认"); apply_btn = QPushButton("应用"); apply_btn.setProperty("primary", True); close_btn = QPushButton("关闭")
+        buttons = QHBoxLayout(); reset = QPushButton(tr('恢复默认')); apply_btn = QPushButton(tr('应用')); apply_btn.setProperty("primary", True); close_btn = QPushButton(tr('关闭'))
         reset.clicked.connect(self._reset); apply_btn.clicked.connect(self._apply); close_btn.clicked.connect(self.accept)
         buttons.addWidget(reset); buttons.addStretch(1); buttons.addWidget(apply_btn); buttons.addWidget(close_btn); root.addLayout(buttons)
 
@@ -558,7 +560,7 @@ class PlotSettingsDialog(QDialog):
 
 
 class ChineseNavigationToolbar(NavigationToolbar2QT):
-    """Matplotlib toolbar with Chinese actions and project-owned dialogs."""
+    """Matplotlib toolbar with localized actions and project-owned dialogs."""
 
     toolitems = (
         ("主页", "恢复初始视图", "home", "home"),
@@ -575,6 +577,8 @@ class ChineseNavigationToolbar(NavigationToolbar2QT):
 
     def __init__(self, canvas, panel, parent=None):
         self.panel = panel
+        self.toolitems = tuple((tr(label) if label else None, tr(tip) if tip else None, icon, callback)
+                               for label, tip, icon, callback in type(self).toolitems)
         super().__init__(canvas, parent or panel, coordinates=True)
 
     def configure_subplots(self):
@@ -585,19 +589,19 @@ class ChineseNavigationToolbar(NavigationToolbar2QT):
 
     def save_figure(self, *args):
         default_type = self.canvas.get_default_filetype()
-        filters = ["PNG 图像 (*.png)", "PDF 文档 (*.pdf)", "SVG 矢量图 (*.svg)", "JPEG 图像 (*.jpg *.jpeg)", "所有文件 (*)"]
-        start = str(Path.home() / f"CV图表.{default_type}")
-        filename, _ = QFileDialog.getSaveFileName(self, "保存图像", start, ";;".join(filters))
+        filters = [tr('PNG 图像 (*.png)'), tr('PDF 文档 (*.pdf)'), tr('SVG 矢量图 (*.svg)'), tr('JPEG 图像 (*.jpg *.jpeg)'), tr('所有文件 (*)')]
+        start = str(Path.home() / tr('CV图表.{0}', default_type))
+        filename, _ = QFileDialog.getSaveFileName(self, tr('保存图像'), start, ";;".join(filters), options=QFileDialog.Option.DontUseNativeDialog)
         if not filename:
             return
         try:
             self.canvas.figure.savefig(filename, dpi=300, bbox_inches="tight")
             try:
-                self.panel.hoverStatus.emit(f"图像已保存：{filename}")
+                self.panel.hoverStatus.emit(tr('图像已保存：{0}', filename))
             except Exception:
                 pass
         except Exception as exc:
-            QMessageBox.critical(self, "保存图像失败", str(exc))
+            QMessageBox.critical(self, tr('保存图像失败'), str(exc))
 
 
 class MplPanel(QWidget):
@@ -627,7 +631,7 @@ class MplPanel(QWidget):
         self.canvas.mpl_connect("figure_leave_event", self._on_leave)
         self.canvas.mpl_connect("pick_event", self._on_pick)
         self.set_theme("light")
-        self.show_empty(empty_text or "暂无数据")
+        self.show_empty(empty_text or tr('暂无数据'))
 
     @staticmethod
     def default_layout_state():
@@ -710,6 +714,7 @@ class MplPanel(QWidget):
 
     def prepare(self, title="", xlabel="", ylabel=""):
         self.figure.clear(); self.ax = self.figure.add_subplot(111); self._legend_layout_override = {}
+        self._legend_title_padding = 10.0
         self.current_plot_defaults = {"title": title, "xlabel": xlabel, "ylabel": ylabel}
         c = self._colors; settings = self.plot_settings
         title_text = title if settings.get("title") is None else settings.get("title")
@@ -735,7 +740,7 @@ class MplPanel(QWidget):
         return self.ax
 
     def show_empty(self, message):
-        ax = self.prepare("", "电位 / Potential (V)", "电流 / Current (A)")
+        ax = self.prepare("", tr('电位 / Potential (V)'), tr('电流 / Current (A)'))
         ax.text(0.5, 0.5, message, ha="center", va="center", transform=ax.transAxes,
                 color=self._colors["muted"], fontsize=11.5, fontfamily=MATPLOTLIB_FONT)
         ax.set_xticks([]); ax.set_yticks([]); self.draw()
@@ -751,7 +756,7 @@ class MplPanel(QWidget):
         if self.ax is None: return
         s = self.plot_settings; d = self.current_plot_defaults; c = self._colors
         base_font = float(s.get("font_size") or 9.5)
-        self.ax.set_title(d.get("title", "") if s.get("title") is None else s.get("title"), color=c["text"], fontfamily=MATPLOTLIB_FONT, fontsize=base_font + (2.0 if self.compact else 3.0))
+        self.ax.set_title(d.get("title", "") if s.get("title") is None else s.get("title"), color=c["text"], fontfamily=MATPLOTLIB_FONT, fontsize=base_font + (2.0 if self.compact else 3.0), pad=self._legend_title_padding)
         self.ax.set_xlabel(d.get("xlabel", "") if s.get("xlabel") is None else s.get("xlabel"), color=c["text"], fontfamily=MATPLOTLIB_FONT, fontsize=base_font)
         self.ax.set_ylabel(d.get("ylabel", "") if s.get("ylabel") is None else s.get("ylabel"), color=c["text"], fontfamily=MATPLOTLIB_FONT, fontsize=base_font)
         self.ax.tick_params(colors=c["muted"], labelsize=max(7.5, base_font - 0.7))
@@ -807,6 +812,7 @@ class MplPanel(QWidget):
     def apply_legend(self, handles=None, labels=None, *, enabled=True, extra_handles=None, extra_labels=None):
         """Create a themed, draggable, length-aware legend."""
         self._legend_layout_override = {}
+        self._legend_title_padding = 10.0
         old = self.ax.get_legend() if self.ax is not None else None
         if old is not None:
             try: old.remove()
@@ -826,6 +832,18 @@ class MplPanel(QWidget):
             seen.add(label); dedup_h.append(h); dedup_l.append(label)
         if not dedup_h: return None
         policy = adaptive_legend_layout(len(dedup_h)); self._legend_layout_override = dict(policy["layout_override"])
+        if "bbox_to_anchor" in policy["kwargs"]:
+            rows = (len(dedup_l) + policy["kwargs"]["ncol"] - 1) // policy["kwargs"]["ncol"]
+            self._legend_title_padding = 8.8 * 1.8 * rows + 12.0
+            title = self.plot_settings.get("title")
+            if title is None:
+                title = self.current_plot_defaults.get("title", "")
+            title_lines = max(1, str(title).count("\n") + 1)
+            title_font = float(self.plot_settings.get("font_size") or 9.5) + (2.0 if self.compact else 3.0)
+            reserve_points = self._legend_title_padding + title_font * 1.5 * title_lines + 6.0
+            height = max(200.0, float(self.canvas.height()))
+            reserve = reserve_points * self.figure.dpi / 72.0 / height
+            self._legend_layout_override["top"] = min(self._legend_layout_override["top"], max(0.35, 1.0 - reserve))
         legend = self.ax.legend(dedup_h, dedup_l, fontsize=8.8, framealpha=0.90,
                                 borderpad=0.55, columnspacing=1.0, handlelength=1.8,
                                 **policy["kwargs"])
@@ -884,7 +902,7 @@ class MplPanel(QWidget):
 class CycleSelectorDialog(QDialog):
     def __init__(self, curves, selected, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("选择显示圈数")
+        self.setWindowTitle(tr('选择显示圈数'))
         self.resize(460, 680)
         self.setMinimumSize(390, 520)
         self.curves = list(curves)
@@ -892,7 +910,7 @@ class CycleSelectorDialog(QDialog):
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(8)
-        hint = QLabel("勾选需要显示的 CV 循环；支持鼠标滚轮与滚动条。")
+        hint = QLabel(tr('勾选需要显示的 CV 循环；支持鼠标滚轮与滚动条。'))
         hint.setProperty("muted", True)
         root.addWidget(hint)
         self.list = QListWidget()
@@ -908,10 +926,10 @@ class CycleSelectorDialog(QDialog):
             self.list.addItem(item)
         root.addWidget(self.list, 1)
         footer = QHBoxLayout()
-        all_btn = QPushButton("全选")
-        clear_btn = QPushButton("清空")
-        cancel_btn = QPushButton("取消")
-        apply_btn = QPushButton("应用")
+        all_btn = QPushButton(tr('全选'))
+        clear_btn = QPushButton(tr('清空'))
+        cancel_btn = QPushButton(tr('取消'))
+        apply_btn = QPushButton(tr('应用'))
         apply_btn.setProperty("primary", True)
         all_btn.clicked.connect(lambda: self._set_all(True))
         clear_btn.clicked.connect(lambda: self._set_all(False))
@@ -947,7 +965,7 @@ class ProcessingWorker(QThread):
         set_log_callback(lambda level, msg: self.log.emit(level, msg))
         try:
             for idx, path in enumerate(self.paths, 1):
-                self.log.emit("INFO", f"处理 {idx}/{len(self.paths)}：{Path(path).name}")
+                self.log.emit("INFO", tr('处理 {0}/{1}：{2}', idx, len(self.paths), Path(path).name))
                 try:
                     out = process_cv_file(
                         input_path=path,
@@ -963,7 +981,7 @@ class ProcessingWorker(QThread):
                         apply_cut_to_all=self.params["apply_cut_to_all"],
                         output_dir=self.params["output_dir"],
                         return_all=True,
-                        # 复用 processor 已经解析成功的原始曲线，避免 CV 页再次读盘。
+                        # Reuse the processor's parsed curves instead of reading the file again for the CV page.
                         include_raw_curves=True,
                     )
                     verification_file, integral_file, df_filtered, df_all, raw_curves = out

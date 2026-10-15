@@ -8,7 +8,7 @@ from .logging_utils import log_warning
 
 
 def _style_summary_workbook(xlsx_path):
-    """四工作表统一格式：双层标题、冻结前两行、居中、合理列宽与数字格式。"""
+    "Format four sheets consistently with two header rows, frozen headers, centered cells, suitable widths and numeric formats."
     try:
         from openpyxl import load_workbook
         from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -94,7 +94,7 @@ def _style_summary_workbook(xlsx_path):
 
 
 def _write_main_results_workbook(xlsx_path, df, mode):
-    """主结果工作簿固定为四个工作表；Onset 两种方法独立输出。"""
+    "Write the fixed four-sheet results workbook with independent onset methods."
     if mode == 'max':
         peak_col, current_col = 'E_ox_peak (V)', 'I_ox_peak (A)'
         onset_threshold_col, onset_tangent_col = 'E_onset_ox_threshold (V)', 'E_onset_ox_tangent (V)'
@@ -146,7 +146,7 @@ def _write_main_results_workbook(xlsx_path, df, mode):
 
 
 def _style_simple_data_workbook(xlsx_path):
-    """对原始/验证类工作簿做轻量格式化，避免影响大文件处理速度。"""
+    "Apply lightweight formatting to raw and verification workbooks without slowing large-file processing."
     try:
         from openpyxl import load_workbook
         from openpyxl.styles import Alignment, Font, PatternFill
@@ -163,11 +163,11 @@ def _style_simple_data_workbook(xlsx_path):
                     cell.fill = PatternFill('solid', fgColor='D9EAF7')
                     cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 ws.row_dimensions[1].height = 26
-            # CV原始表通常只有2列，限制为前12列防止异常文件造成格式化过慢。
+            # Raw CV tables usually have two columns; limit formatting to twelve to avoid excessive work on malformed files.
             style_cols = min(ws.max_column, 12)
             for c in range(1, style_cols + 1):
                 ws.column_dimensions[chr(64 + c) if c <= 26 else 'A'].width = 16
-            # 所有已使用单元格居中。20圈数据量仍可接受。
+            # Center used cells; the cost remains acceptable for twenty-cycle datasets.
             for row in ws.iter_rows(min_row=2, max_row=ws.max_row, max_col=style_cols):
                 for cell in row:
                     cell.alignment = Alignment(horizontal='center', vertical='center')

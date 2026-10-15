@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..i18n import tr
+
 import re
 import numpy as np
 import pandas as pd
@@ -13,8 +15,8 @@ from .config import (
 from .logging_utils import log_info, log_warning
 
 def filter_curves(curves, mode):
-    """根据模式筛选，跳过无效曲线"""
-    log_info(f"开始筛选数据（模式：{mode}）")
+    "Filter by analysis mode and skip invalid curves."
+    log_info(tr('开始筛选数据（模式：{0}）', mode))
     filtered = {}
     MIN_POINTS = 100
     for name, df in curves.items():
@@ -22,7 +24,7 @@ def filter_curves(curves, mode):
         df['Im'] = pd.to_numeric(df['Im'], errors='coerce')
         df = df.dropna(subset=['Im'])
         if df.empty:
-            log_warning(f"曲线 {name} 无有效 Im 数据，跳过")
+            log_warning(tr('曲线 {0} 无有效 Im 数据，跳过', name))
             continue
         if mode == 'max':
             mask = df['Im'] >= 0
@@ -30,28 +32,28 @@ def filter_curves(curves, mode):
             mask = df['Im'] <= 0
         filtered_df = df.loc[mask].reset_index(drop=True)
         if filtered_df.empty:
-            log_warning(f"曲线 {name} 筛选后为空，已跳过")
+            log_warning(tr('曲线 {0} 筛选后为空，已跳过', name))
             continue
         if len(filtered_df) < MIN_POINTS:
-            log_warning(f"曲线 {name} 数据点仅 {len(filtered_df)}（少于 {MIN_POINTS}），判定无效，已跳过")
+            log_warning(tr('曲线 {0} 数据点仅 {1}（少于 {2}），判定无效，已跳过', name, len(filtered_df), MIN_POINTS))
             continue
         filtered[name] = filtered_df
     if not filtered:
-        raise ValueError("所有曲线筛选后均为空，无法继续")
-    log_info(f"筛选完成，共 {len(filtered)} 条有效曲线")
+        raise ValueError(tr('所有曲线筛选后均为空，无法继续'))
+    log_info(tr('筛选完成，共 {0} 条有效曲线', len(filtered)))
     return filtered
 
-# ================== 极值切分 ==================
+# ================== Splitting at extrema ==================
 def split_at_extreme(df, mode, target_voltage, precision_mv):
     if len(df) == 0:
-        raise ValueError("数据框为空，无法切分")
+        raise ValueError(tr('数据框为空，无法切分'))
     half_width = precision_mv / 1000.0
     v_min = target_voltage - half_width
     v_max = target_voltage + half_width
     mask = (df['Vf'] >= v_min) & (df['Vf'] <= v_max)
     window_df = df.loc[mask]
     if window_df.empty:
-        raise ValueError(f"电压 {target_voltage:.4f} V ± {precision_mv} mV 内无数据点")
+        raise ValueError(tr('电压 {0:.4f} V ± {1} mV 内无数据点', target_voltage, precision_mv))
     if mode == 'max':
         idx = window_df['Im'].idxmax()
     else:
@@ -60,9 +62,9 @@ def split_at_extreme(df, mode, target_voltage, precision_mv):
     part2 = df.iloc[idx:].reset_index(drop=True)
     return part1, part2
 
-# ================== 特征电位分析 ==================
+# ================== Feature potential analysis ==================
 def _clean_numeric_curve(df):
-    """仅保留可用于特征分析的数值 Vf / Im 数据。"""
+    "Keep numeric Vf / Im values suitable for feature analysis."
     if df is None or df.empty or 'Vf' not in df.columns or 'Im' not in df.columns:
         return pd.DataFrame(columns=['Vf', 'Im'])
     out = df[['Vf', 'Im']].copy()
@@ -73,7 +75,7 @@ def _clean_numeric_curve(df):
 
 
 def _odd_window_from_voltage(v, width_mv, min_points=5):
-    """把目标平滑电压宽度转换为奇数窗口点数。"""
+    "Convert a voltage smoothing width into an odd number of window points."
     v = np.asarray(v, dtype=float)
     if len(v) < min_points:
         return max(1, len(v))
@@ -91,7 +93,7 @@ def _odd_window_from_voltage(v, width_mv, min_points=5):
 
 
 def _smooth_current_by_voltage(v, current, width_mv=FEATURE_SMOOTH_MV):
-    """轻度稳健平滑：滚动中位数去毛刺，再做小窗口均值。无 scipy 依赖。"""
+    "Apply robust light smoothing: a rolling median removes spikes, followed by a short moving average. No SciPy dependency."
     current = np.asarray(current, dtype=float)
     if len(current) < 5:
         return current.copy(), 1
@@ -108,7 +110,7 @@ def _smooth_current_by_voltage(v, current, width_mv=FEATURE_SMOOTH_MV):
 
 
 def _robust_line_fit(x, y, sigma_clip=3.0, max_iter=5):
-    """迭代 MAD 裁剪的一次直线拟合，返回 slope, intercept, R2。"""
+    "Fit a line with iterative MAD clipping and return slope, intercept and R2."
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     valid = np.isfinite(x) & np.isfinite(y)
@@ -145,23 +147,17 @@ def _robust_line_fit(x, y, sigma_clip=3.0, max_iter=5):
 
 
 def _extract_forward_scan(df, mode):
-    """
-    根据实际 dV 方向提取去程扫描支，而不是只依赖全局最大/最小电压点。
-
-    max: 目标方向 dV > 0；min: 目标方向 dV < 0。
-    对起始小幅抖动设置容忍区，并以“持续反向扫描”识别真正换向点。
-    返回 (branch, direction_fraction)。
-    """
+    "Extract the forward branch using actual dV direction rather than global voltage extrema.\n\nFor max, target dV > 0; for min, target dV < 0.\nAllow small initial jitter and detect the turning point from sustained reversal.\nReturn (branch, direction_fraction)."
     clean = _clean_numeric_curve(df)
     if len(clean) < 20:
-        raise ValueError('有效数值点不足 20 个')
+        raise ValueError(tr('有效数值点不足 20 个'))
 
     v = clean['Vf'].to_numpy(dtype=float)
     direction = 1.0 if mode == 'max' else -1.0
     dv = np.diff(v)
     abs_dv = np.abs(dv[np.isfinite(dv) & (np.abs(dv) > 0)])
     if len(abs_dv) == 0:
-        raise ValueError('电压序列没有有效变化')
+        raise ValueError(tr('电压序列没有有效变化'))
 
     step_v = float(np.median(abs_dv))
     tol = max(step_v * 0.15, 1e-8)
@@ -170,9 +166,9 @@ def _extract_forward_scan(df, mode):
     extreme_idx = int(np.argmax(v)) if mode == 'max' else int(np.argmin(v))
     full_span = float(direction * (v[extreme_idx] - v[0]))
     if not np.isfinite(full_span) or full_span <= 0:
-        raise ValueError('无法识别目标方向的有效电压跨度')
+        raise ValueError(tr('无法识别目标方向的有效电压跨度'))
 
-    # 持续至少约 5 mV 的反向变化才视作真正回扫，避免把单点抖动误判为换向。
+    # Require about 5 mV of sustained reversal to distinguish a return scan from single-point jitter.
     reverse_run = max(3, int(round(0.005 / max(step_v, 1e-12))))
     reverse_run = min(reverse_run, 25)
     min_progress = min(max(0.05, 0.20 * full_span), 0.50 * full_span)
@@ -191,7 +187,7 @@ def _extract_forward_scan(df, mode):
         vertex_idx = extreme_idx
 
     if vertex_idx < 10:
-        raise ValueError('无法识别有效去程扫描支')
+        raise ValueError(tr('无法识别有效去程扫描支'))
 
     branch = clean.iloc[:vertex_idx + 1].reset_index(drop=True)
     vb = branch['Vf'].to_numpy(dtype=float)
@@ -206,7 +202,7 @@ def _extract_forward_scan(df, mode):
 
 
 def _contiguous_true_groups(mask):
-    """返回布尔数组中连续 True 的 [start, end] 索引。"""
+    "Return [start, end] indices for contiguous True runs in a Boolean array."
     mask = np.asarray(mask, dtype=bool)
     groups = []
     i = 0
@@ -224,10 +220,7 @@ def _contiguous_true_groups(mask):
 
 
 def _tangent_onset(v, progress, reaction_signal, baseline_width_v, peak_idx):
-    """
-    用基线校正后的反应信号做辅助切线法：
-    取主峰前、靠近主峰的 10%~40% 反应幅度区间拟合并求零交点。
-    """
+    "Estimate a supporting tangent onset from the baseline-corrected reaction signal.\nFit the 10%–40% amplitude interval before and nearest the main peak, then find its zero crossing."
     if len(v) < 20 or peak_idx <= 5:
         return np.nan, np.nan
     y = np.asarray(reaction_signal, dtype=float)
@@ -246,7 +239,7 @@ def _tangent_onset(v, progress, reaction_signal, baseline_width_v, peak_idx):
     if not groups:
         return np.nan, np.nan
 
-    # 选择离主峰最近且点数足够的连续区间，避免把早期肩峰和主氧化过程混在一起。
+    # Choose a sufficiently long contiguous interval nearest the main peak, avoiding early shoulders.
     groups = [(s, e) for s, e in groups if e - s + 1 >= 8]
     if not groups:
         return np.nan, np.nan
@@ -267,15 +260,7 @@ def _tangent_onset(v, progress, reaction_signal, baseline_width_v, peak_idx):
 
 
 def analyze_curve_features(df, mode):
-    """
-    分析单圈 CV 特征。
-
-    - 去程扫描支：按 dV 方向与持续换向识别。
-    - 峰位：在去除早期基线区后，于轻度平滑信号上寻找主峰候选；
-      边界峰保留数值但标记 Boundary，内部肩峰标记 Review。
-    - 起始电位：稳健线性基线 + MAD 噪声阈值 + 持续电压区间。
-    - 切线法仅作为辅助校验，不强行替代主阈值法。
-    """
+    "Analyze the CV features of one cycle.\n\n- Detect the forward branch by dV direction and sustained reversal.\n- Find the main peak on a lightly smoothed signal after excluding the early baseline region.\n  Retain boundary peak values with Boundary status and mark internal shoulders Review.\n- Determine onset with a robust linear baseline, MAD noise threshold and sustained voltage interval.\n- Use tangent onset as an independent supporting check, never as a forced replacement for threshold onset."
     branch, direction_fraction = _extract_forward_scan(df, mode)
     v = branch['Vf'].to_numpy(dtype=float)
     current = branch['Im'].to_numpy(dtype=float)
@@ -283,7 +268,7 @@ def analyze_curve_features(df, mode):
     progress = direction * (v - v[0])
     span_v = float(progress[-1] - progress[0])
     if not np.isfinite(span_v) or span_v <= 0:
-        raise ValueError('去程扫描电压跨度无效')
+        raise ValueError(tr('去程扫描电压跨度无效'))
 
     smooth_current, smooth_points = _smooth_current_by_voltage(v, current, FEATURE_SMOOTH_MV)
 
@@ -299,7 +284,7 @@ def analyze_curve_features(df, mode):
         v[baseline_mask], current[baseline_mask], sigma_clip=3.0, max_iter=5
     )
     if not np.isfinite(base_slope):
-        raise ValueError('基线拟合失败')
+        raise ValueError(tr('基线拟合失败'))
 
     baseline = base_slope * v + base_intercept
     raw_reaction = direction * (current - baseline)
@@ -316,7 +301,7 @@ def analyze_curve_features(df, mode):
 
     onset_threshold = residual_center + FEATURE_ONSET_SIGMA * noise_sigma
 
-    # 峰位候选：排除起始基线区，减少 OCP 瞬态/量程切换对全局极值的干扰。
+    # Exclude the initial baseline region to reduce OCP transients and range-switching artifacts.
     transformed_smooth = direction * smooth_current
     search_idx = np.where(progress >= baseline_width_v)[0]
     if len(search_idx) < 5:
@@ -344,7 +329,7 @@ def analyze_curve_features(df, mode):
         )
         peak_status = QCStatus.OK.value if decline >= required_decline else QCStatus.REVIEW.value
 
-    # 主 onset：找超过阈值并持续至少指定电压宽度的反应区。
+    # Primary onset: find a reaction region above the threshold for the specified voltage span.
     cond = (reaction > onset_threshold) & (progress >= baseline_width_v)
     groups = _contiguous_true_groups(cond)
     persist_v = FEATURE_ONSET_PERSIST_MV / 1000.0
@@ -357,7 +342,7 @@ def analyze_curve_features(df, mode):
 
     onset_idx = None
     if valid_groups:
-        # 选择主峰之前、最靠近主峰的持续反应区；若峰失败则选最后一个有效区。
+        # Choose the sustained reaction region nearest and before the main peak, or the last valid region if peak detection fails.
         if np.isfinite(peak_v):
             candidates = [(start, end) for start, end in valid_groups if start <= peak_idx]
             if candidates:
@@ -377,7 +362,7 @@ def analyze_curve_features(df, mode):
         and tangent_r2 >= FEATURE_TANGENT_R2_MIN
     )
 
-    # v1.8：不再生成“最终采用的 onset”。阈值法与切线法作为两套并行结果输出。
+    # Threshold and tangent onset methods are reported independently; neither is designated the final onset.
     threshold_qc = QCStatus.OK.value if np.isfinite(onset_primary) else QCStatus.FAILED.value
     if np.isfinite(onset_tangent) and np.isfinite(tangent_r2):
         tangent_qc = QCStatus.OK.value if tangent_r2 >= FEATURE_TANGENT_R2_MIN else QCStatus.REVIEW.value
@@ -431,7 +416,7 @@ def analyze_curve_features(df, mode):
 
 
 def analyze_cv_features(curves, mode):
-    """分析全部有效原始 CURVE；Threshold 与 Tangent 两种 onset 方法独立输出。"""
+    "Analyze all valid raw CURVE sections and report threshold and tangent onset independently."
     rows = []
     verification = {}
 
@@ -445,9 +430,9 @@ def analyze_cv_features(curves, mode):
             clean = _clean_numeric_curve(df)
         except Exception:
             clean = pd.DataFrame()
-        # Gamry 文件末尾可能带有仅 1 个点的占位 CURVE，不计为有效循环。
+        # Ignore single-point placeholder CURVE sections that may occur at the end of Gamry files.
         if len(clean) < 20:
-            log_warning(f'曲线 {name} 数据点不足 20，视为无效占位曲线并跳过')
+            log_warning(tr('曲线 {0} 数据点不足 20，视为无效占位曲线并跳过', name))
             continue
         try:
             result, verify_df = analyze_curve_features(clean, mode)
@@ -455,7 +440,7 @@ def analyze_cv_features(curves, mode):
             rows.append(result)
             verification[name] = verify_df
         except Exception as exc:
-            log_warning(f'曲线 {name} 特征电位分析失败：{exc}')
+            log_warning(tr('曲线 {0} 特征电位分析失败：{1}', name, exc))
             rows.append({
                 'Curve': name,
                 'E_peak (V)': np.nan,
@@ -475,14 +460,14 @@ def analyze_cv_features(curves, mode):
             })
 
     if not rows:
-        log_warning('未生成任何特征电位结果')
+        log_warning(tr('未生成任何特征电位结果'))
         return pd.DataFrame(), verification
 
     feature_df = pd.DataFrame(rows)
     feature_df['_curve_no'] = feature_df['Curve'].map(curve_number)
     feature_df = feature_df.sort_values('_curve_no').drop(columns=['_curve_no']).reset_index(drop=True)
 
-    # Reference 只定义“参考圈”，不要求某种 onset 方法必须有效；各方法分别计算位移。
+    # Reference specifies a cycle only; each onset method computes its shift independently.
     if (feature_df['Curve'] == 'CURVE1').any():
         ref_row = feature_df.loc[feature_df['Curve'] == 'CURVE1'].iloc[0]
     else:
@@ -529,7 +514,7 @@ def analyze_cv_features(curves, mode):
         }
     return feature_df.rename(columns=rename_map), verification
 def generate_auto_indices(total_curves, target_count=5):
-    """自动生成均匀分布的圈号，包含首尾"""
+    "Generate evenly distributed cycle numbers, including the first and last."
     if total_curves <= target_count:
         return list(range(1, total_curves+1))
     indices = []

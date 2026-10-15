@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ..i18n import tr
 
 """Qt-free helpers shared by Matplotlib result plots.
 
@@ -211,20 +212,20 @@ def build_onset_label_items(x_values, threshold_values, tangent_values,
         if both and t_ok and g_ok and fmt.format(float(t)) == fmt.format(float(g)):
             out.append({
                 "x": float(x), "y": (float(t) + float(g)) / 2.0,
-                "text": f"阈/切 {fmt.format(float(t))}",
+                "text": tr("阈/切 {0}", fmt.format(float(t))),
                 "kind": "combined", "preferred": "up",
             })
             continue
         if show_threshold and t_ok:
             out.append({
                 "x": float(x), "y": float(t),
-                "text": f"阈 {fmt.format(float(t))}" if both else fmt.format(float(t)),
+                "text": tr("阈 {0}", fmt.format(float(t))) if both else fmt.format(float(t)),
                 "kind": "threshold", "preferred": "up",
             })
         if show_tangent and g_ok:
             out.append({
                 "x": float(x), "y": float(g),
-                "text": f"切 {fmt.format(float(g))}" if both else fmt.format(float(g)),
+                "text": tr("切 {0}", fmt.format(float(g))) if both else fmt.format(float(g)),
                 "kind": "tangent", "preferred": "down",
             })
     return out

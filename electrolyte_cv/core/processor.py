@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..i18n import tr
+
 import os
 import re
 from pathlib import Path
@@ -28,21 +30,14 @@ def _trapezoid_integral(y, x):
     legacy_trapz = getattr(np, "trapz", None)
     if legacy_trapz is not None:
         return legacy_trapz(y, x)
-    raise RuntimeError("当前 NumPy 版本既不提供 trapezoid 也不提供 trapz")
+    raise RuntimeError(tr('当前 NumPy 版本既不提供 trapezoid 也不提供 trapz'))
 
 def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage, end_voltage,
                     save_verification, selection_mode, auto_target, manual_indices,
                     apply_cut_to_all, output_dir=None, return_all=False, include_raw_curves=False):
-    """
-    新增参数：
-      selection_mode: 'auto' 或 'manual'
-      auto_target: 自动模式目标圈数
-      manual_indices: 手动模式圈号列表 (list of int)
-      apply_cut_to_all: 是否对所有输出文件应用圈号切分
-      output_dir: 指定输出文件夹；为空时默认输出到输入文件所在文件夹
-    """
+    "Process a CV file with configurable selection and output options.\n\nselection_mode: 'auto' or 'manual'.\nauto_target: target cycle count for automatic selection.\nmanual_indices: cycle numbers for manual selection (list of int).\napply_cut_to_all: apply cycle selection to all output files.\noutput_dir: output folder; default to the input file's folder when empty."
     if not os.path.isfile(input_path):
-        raise FileNotFoundError(f"文件不存在：{input_path}")
+        raise FileNotFoundError(tr('文件不存在：{0}', input_path))
 
     scan_rate_v = scan_rate_mv / 1000.0
 
@@ -52,7 +47,7 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
         output_path_obj.mkdir(parents=True, exist_ok=True)
         base = str(output_path_obj / input_path_obj.stem)
     else:
-        # 未指定输出路径时，保持原行为：输出到输入文件所在文件夹。
+        # Without an explicit output path, write next to the input file.
         base = str(input_path_obj.with_suffix(''))
 
     split_file = base + "_Split.xlsx"
@@ -64,23 +59,23 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
 
     target_voltage = end_voltage
     if mode == 'max' and end_voltage <= start_voltage:
-        raise ValueError("Max模式：终止电压须大于起始电压")
+        raise ValueError(tr('Max模式：终止电压须大于起始电压'))
     if mode == 'min' and start_voltage <= end_voltage:
-        raise ValueError("Min模式：起始电压须大于终止电压")
+        raise ValueError(tr('Min模式：起始电压须大于终止电压'))
 
-    log_info(f"开始处理：{input_path}")
-    log_info(f"输出目录：{Path(base).parent}")
-    log_info(f"模式：{mode}，扫描速率：{scan_rate_mv} mV/s")
-    log_info(f"电压范围：{start_voltage}V → {end_voltage}V")
-    log_info(f"切分精度：±{precision_mv} mV，目标电压：{target_voltage}V")
+    log_info(tr('开始处理：{0}', input_path))
+    log_info(tr('输出目录：{0}', Path(base).parent))
+    log_info(tr('模式：{0}，扫描速率：{1} mV/s', mode, scan_rate_mv))
+    log_info(tr('电压范围：{0}V → {1}V', start_voltage, end_voltage))
+    log_info(tr('切分精度：±{0} mV，目标电压：{1}V', precision_mv, target_voltage))
     if save_verification:
-        log_info("生成验证文件")
+        log_info(tr('生成验证文件'))
     else:
-        log_info("不生成验证文件")
+        log_info(tr('不生成验证文件'))
     if apply_cut_to_all:
-        log_info("仅输出圈号列表数据")
+        log_info(tr('仅输出圈号列表数据'))
     else:
-        log_info("输出全部圈数数据")
+        log_info(tr('输出全部圈数数据'))
 
     ext = Path(input_path).suffix.lower()
     if ext in ('.txt', '.dta'):
@@ -88,30 +83,30 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
     else:
         curves = parse_excel_to_curves(input_path)
 
-    # 特征电位分析必须使用原始曲线，不能先按电流正负筛掉基线附近的数据。
-    log_info("正在分析峰电位与起始电位...")
+    # Feature analysis must use raw curves before filtering out baseline points by current sign.
+    log_info(tr('正在分析峰电位与起始电位...'))
     feature_df_all, feature_verification = analyze_cv_features(curves, mode)
     if not feature_df_all.empty:
-        log_info(f"特征电位分析完成，共 {len(feature_df_all)} 条有效曲线")
+        log_info(tr('特征电位分析完成，共 {0} 条有效曲线', len(feature_df_all)))
     else:
-        log_warning("特征电位分析未得到有效结果；积分流程仍继续")
+        log_warning(tr('特征电位分析未得到有效结果；积分流程仍继续'))
 
-    # 原积分模块保持原逻辑：按正/负电流筛选。
+    # Preserve the integration workflow's positive/negative current filtering.
     filtered = filter_curves(curves, mode)
 
-    # 切分
-    log_info("正在切分曲线...")
+    # Split curves.
+    log_info(tr('正在切分曲线...'))
     split_results = {}
     for name, df in filtered.items():
         try:
             p1, p2 = split_at_extreme(df, mode, target_voltage, precision_mv)
             split_results[name] = (p1, p2)
         except ValueError as e:
-            raise ValueError(f"曲线 {name} 切分失败：{e}")
+            raise ValueError(tr('曲线 {0} 切分失败：{1}', name, e))
 
-    log_info("切分完成，开始计算积分...")
+    log_info(tr('切分完成，开始计算积分...'))
 
-    # ---- 计算所有曲线的积分（用于 _Integral_Results 和后续过滤） ----
+    # ---- Integrate all curves for _Integral_Results and subsequent filtering ----
     integral_rows = []
     for name, (p1, p2) in split_results.items():
         if p1 is not None and len(p1) > 1:
@@ -148,14 +143,14 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
         integral_rows.append(record)
 
     if not integral_rows:
-        raise ValueError("未生成积分数据")
+        raise ValueError(tr('未生成积分数据'))
 
     df_integral_all = pd.DataFrame(integral_rows)
     charge_type = "Q_ox (C)" if mode == 'max' else "Q_red (C)"
     df_integral_all[charge_type] = df_integral_all['Q1 (C)'] + df_integral_all['Q2 (C)']
 
-    # 合并特征电位结果。特征分析先对全部原始曲线完成，再在后面按用户圈号筛选。
-    # 使用 outer merge，使“积分失败但特征可分析”的有效循环仍能出现在 GUI/QC 中。
+    # Analyze features on all raw curves, then apply the requested cycle selection.
+    # Outer-merge so cycles with valid features remain visible in GUI/QC even when integration fails.
     if feature_df_all is not None and not feature_df_all.empty:
         df_integral_all = df_integral_all.merge(feature_df_all, on='Curve', how='outer')
 
@@ -170,73 +165,73 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
         .reset_index(drop=True)
     )
 
-    # ---- 确定最终要输出的圈号列表 ----
+    # ---- Determine the final output cycles ----
     available_indices = sorted({_curve_no(name) for name in df_integral_all['Curve'] if _curve_no(name) < 10**9})
     total_curves = len(available_indices)
-    log_info(f"总有效圈数：{total_curves}")
+    log_info(tr('总有效圈数：{0}', total_curves))
     if total_curves == 0:
-        raise ValueError("未检测到有效曲线")
+        raise ValueError(tr('未检测到有效曲线'))
 
     if selection_mode == 'auto':
         target_count = auto_target if auto_target > 0 else 5
         if total_curves <= target_count:
             selected_indices = list(available_indices)
         else:
-            # 在实际存在的圈号序列上均匀取点，不假设圈号绝对连续。
+            # Sample evenly from existing cycle numbers without assuming consecutive numbering.
             positions = generate_auto_indices(total_curves, target_count)
             selected_indices = [available_indices[pos - 1] for pos in positions]
-        log_info(f"自动选择圈号：{selected_indices}")
+        log_info(tr('自动选择圈号：{0}', selected_indices))
     else:
         selected_indices = [i for i in manual_indices if i in available_indices]
         if not selected_indices:
-            raise ValueError("手动模式：指定的圈号均无效，请检查输入")
+            raise ValueError(tr('手动模式：指定的圈号均无效，请检查输入'))
         if len(selected_indices) < len(manual_indices):
-            log_warning("部分圈号不存在或无效，已忽略")
-        log_info(f"手动选择圈号：{selected_indices}")
+            log_warning(tr('部分圈号不存在或无效，已忽略'))
+        log_info(tr('手动选择圈号：{0}', selected_indices))
 
-    # 根据 apply_cut_to_all 决定是否应用切分
+    # Apply cycle selection according to apply_cut_to_all.
     if apply_cut_to_all:
         selected_curve_names = [f"CURVE{i}" for i in selected_indices]
-        # 过滤积分数据
+        # Filter integration results.
         df_integral_filtered = df_integral_all[df_integral_all['Curve'].isin(selected_curve_names)].copy()
-        # 保持顺序
+        # Preserve ordering.
         order_map = {name: idx for idx, name in enumerate(selected_curve_names)}
         df_integral_filtered['_order'] = df_integral_filtered['Curve'].map(order_map)
         df_integral_filtered = df_integral_filtered.sort_values('_order').drop('_order', axis=1)
-        log_info(f"积分结果已过滤，保留 {len(df_integral_filtered)} 条曲线")
-        # 同时，需要过滤 curves 和 filtered 字典，用于生成 _Split.xlsx 和验证文件
+        log_info(tr('积分结果已过滤，保留 {0} 条曲线', len(df_integral_filtered)))
+        # Filter curves and filtered data for _Split.xlsx and verification files as well.
         curves_filtered = {name: df for name, df in curves.items() if name in selected_curve_names}
         filtered_filtered = {name: df for name, df in filtered.items() if name in selected_curve_names}
         split_results_filtered = {name: (p1, p2) for name, (p1, p2) in split_results.items() if name in selected_curve_names}
         feature_verification_filtered = {name: df for name, df in feature_verification.items() if name in selected_curve_names}
     else:
-        # 不切分，全部输出
+        # Export all cycles without filtering.
         df_integral_filtered = df_integral_all.copy()
         curves_filtered = curves
         filtered_filtered = filtered
         split_results_filtered = split_results
         feature_verification_filtered = feature_verification
-        selected_curve_names = None  # 不适用
+        selected_curve_names = None  # Not applicable.
 
-    # ---- 保存 _Split.xlsx（应用切分规则） ----
-    log_info("保存拆分文件...")
+    # ---- Save _Split.xlsx with the selected-cycle rule ----
+    log_info(tr('保存拆分文件...'))
     with pd.ExcelWriter(split_file, engine='openpyxl') as writer:
         for name, df in curves_filtered.items():
             df.to_excel(writer, sheet_name=name, index=False)
     _style_simple_data_workbook(split_file)
-    log_info(f"已生成：{split_file}")
+    log_info(tr('已生成：{0}', split_file))
 
-    # ---- 可选生成验证文件 ----
+    # ---- Optional verification files ----
     if save_verification and calc_file:
-        log_info(f"保存筛选数据到 {calc_file}...")
+        log_info(tr('保存筛选数据到 {0}...', calc_file))
         with pd.ExcelWriter(calc_file, engine='openpyxl') as writer:
             for name, df in filtered_filtered.items():
                 df.to_excel(writer, sheet_name=name, index=False)
         _style_simple_data_workbook(calc_file)
-        log_info(f"已生成：{calc_file}")
+        log_info(tr('已生成：{0}', calc_file))
 
     if save_verification and extreme_file:
-        log_info(f"保存切分数据到 {extreme_file}...")
+        log_info(tr('保存切分数据到 {0}...', extreme_file))
         with pd.ExcelWriter(extreme_file, engine='openpyxl') as writer:
             for name, (p1, p2) in split_results_filtered.items():
                 if p1 is not None and not p1.empty:
@@ -244,13 +239,13 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
                 if p2 is not None and not p2.empty:
                     p2.to_excel(writer, sheet_name=f"{name}_Part2", index=False)
         _style_simple_data_workbook(extreme_file)
-        log_info(f"已生成：{extreme_file}")
+        log_info(tr('已生成：{0}', extreme_file))
 
-    # ---- 保存主结果工作簿：4个工作表，QC固定最后 ----
+    # ---- Save the four-sheet results workbook with QC last ----
     _write_main_results_workbook(integral_file, df_integral_filtered, mode)
-    log_info(f"积分与特征结果工作簿：{integral_file}")
+    log_info(tr('积分与特征结果工作簿：{0}', integral_file))
 
-    # 如果生成验证文件，同时写入积分/特征结果和特征识别辅助数据。
+    # Append integration, feature results and diagnostic data to verification files when enabled.
     if save_verification and extreme_file:
         with pd.ExcelWriter(extreme_file, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
             df_integral_filtered.to_excel(writer, sheet_name='Integral_Results', index=False)
@@ -263,10 +258,10 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
                     feature_summary = feature_summary.sort_values('_order').drop(columns=['_order'])
                 feature_summary.to_excel(writer, sheet_name='Feature_Results', index=False)
             for name, verify_df in feature_verification_filtered.items():
-                # Excel sheet 名限制 31 字符；F_CURVE20 等名称足够短。
+                # Excel sheet names are limited to 31 characters; names such as F_CURVE20 fit.
                 verify_df.to_excel(writer, sheet_name=f"F_{name}"[:31], index=False)
         _style_simple_data_workbook(extreme_file)
-        log_info("积分结果与特征电位验证数据已追加到验证文件")
+        log_info(tr('积分结果与特征电位验证数据已追加到验证文件'))
 
     if return_all:
         base_result = (
@@ -275,8 +270,8 @@ def process_cv_file(input_path, mode, scan_rate_mv, precision_mv, start_voltage,
             df_integral_filtered,
             df_integral_all,
         )
-        # GUI 预览可选地复用本次分析阶段已经成功解析的原始 CURVE。
-        # 默认仍返回原来的 4 元组，保持现有调用者和测试兼容。
+        # GUI previews may reuse the original CURVE data parsed during this analysis.
+        # Keep the original four-value return by default for compatibility with existing callers.
         if include_raw_curves:
             return base_result + (curves,)
         return base_result

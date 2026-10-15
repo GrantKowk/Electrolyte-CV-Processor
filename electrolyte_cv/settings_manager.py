@@ -15,6 +15,7 @@ SOFTWARE_DEFAULTS: dict[str, Any] = {
     "startup_behavior": "defaults",  # defaults | last_session
     "default_tab": "cv",
     "theme": "light",
+    "language": "en",
     "log_expanded": False,
     "analysis": {
         "mode": "max",
@@ -88,6 +89,8 @@ def normalize_profile(value: Any) -> dict[str, Any]:
         profile["default_tab"] = "cv"
     if profile.get("theme") not in ("light", "dark"):
         profile["theme"] = "light"
+    if profile.get("language") not in ("en", "zh"):
+        profile["language"] = "en"
     analysis = profile["analysis"]
     if analysis.get("mode") not in ("max", "min"):
         analysis["mode"] = "max"
@@ -133,19 +136,30 @@ class SettingsManager:
             pass
         return normalized
 
+    def load_language(self) -> str:
+        language = str(self.settings.value("interface/language", "en"))
+        return language if language in ("en", "zh") else "en"
+
+    def save_language(self, language: str) -> None:
+        self.settings.setValue("interface/language", language if language in ("en", "zh") else "en")
+        self.settings.sync()
+
     def load_defaults(self) -> dict[str, Any]:
         profile = self._read_profile(DEFAULTS_KEY)
         if profile is not None:
+            profile["language"] = self.load_language()
             return profile
         # Preserve theme from old v2.0 QSettings so upgrading does not silently reset it.
         profile = software_defaults()
         legacy_theme = str(self.settings.value("theme", "light") or "light")
         if legacy_theme in ("light", "dark"):
             profile["theme"] = legacy_theme
+        profile["language"] = self.load_language()
         return profile
 
     def save_defaults(self, profile: Mapping[str, Any]) -> dict[str, Any]:
         normalized = self._write_profile(DEFAULTS_KEY, profile)
+        self.save_language(normalized["language"])
         # Keep the legacy theme key synchronized for backward compatibility.
         self.settings.setValue("theme", normalized["theme"])
         return normalized
@@ -163,7 +177,9 @@ class SettingsManager:
             if session is not None:
                 # Startup mode is a user preference, not transient session state.
                 session["startup_behavior"] = "last_session"
+                session["language"] = self.load_language()
                 return session
+        defaults["language"] = self.load_language()
         return defaults
 
     def restore_software_defaults(self) -> dict[str, Any]:
